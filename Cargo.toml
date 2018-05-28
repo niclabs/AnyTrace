@@ -1,0 +1,9 @@
+[package]
+name = "globaltrace"
+version = "0.1.0"
+authors = ["Felipe <fdns@niclabs.cl>"]
+
+[dependencies]
+
+[dependencies.pnet]
+version = "0.21.0"
