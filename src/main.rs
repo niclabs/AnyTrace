@@ -2,10 +2,11 @@ extern crate pnet;
 
 use pnet::datalink::{self, NetworkInterface};
 use pnet::packet::Packet;
-use pnet::packet::ethernet::{EtherTypes, EthernetPacket, MutableEthernetPacket};
+use pnet::packet::ethernet::{EtherTypes, EthernetPacket};
 use pnet::packet::icmp::{checksum, echo_reply, echo_request, time_exceeded, Icmp, IcmpCode,
                          IcmpPacket, IcmpTypes, MutableIcmpPacket};
-use pnet::packet::ip::{IpNextHeaderProtocol, IpNextHeaderProtocols};
+use pnet::packet::ip::{IpNextHeaderProtocols};
+use pnet::packet::ipv4::Ipv4Packet;
 use pnet::transport::TransportProtocol::Ipv4;
 use pnet::transport::transport_channel;
 
@@ -14,7 +15,11 @@ use std::net::Ipv4Addr;
 use std::net::SocketAddrV4;
 use std::net::UdpSocket;
 
+
 use pnet::transport::TransportChannelType::{Layer3, Layer4};
+
+mod icmp;
+use icmp::IcmpReader;
 
 fn send_udp() -> std::io::Result<()> {
     let socket = UdpSocket::bind("0.0.0.0:34254")?;
@@ -61,7 +66,6 @@ fn send_icmp() {
     }
 
     println!("Sended {:?}", buffer);
-    //return;
     match tx.send_to(
         IcmpPacket::new(&buffer).unwrap(),
         "1.1.1.1".parse().unwrap(),
@@ -74,7 +78,6 @@ fn send_icmp() {
     //let newpacket = MutableIcmpPacket
 }
 
-use pnet::packet::ipv4::Ipv4Packet;
 
 fn receive_icmp() -> std::io::Result<()> {
     use pnet::datalink::Channel::Ethernet;
@@ -158,7 +161,8 @@ fn receive_icmp() -> std::io::Result<()> {
 
 fn main() {
     // -> std::io::Result<()> {
-    receive_icmp();
+    //receive_icmp();
     //send_udp();
     //send_icmp();
+    IcmpReader::new().run();
 }
