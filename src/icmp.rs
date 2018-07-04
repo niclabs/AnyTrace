@@ -1,86 +1,60 @@
 extern crate pnet;
 
-use pnet::datalink::Channel::Ethernet;
-use pnet::datalink::{self, NetworkInterface};
-use pnet::datalink::{DataLinkReceiver};
 use pnet::packet::Packet;
-use pnet::packet::ethernet::{EtherTypes, EthernetPacket};
 use pnet::packet::icmp::{checksum, echo_request, IcmpPacket, IcmpTypes, MutableIcmpPacket};
 use pnet::packet::ip::IpNextHeaderProtocols;
 use pnet::packet::ipv4::Ipv4Packet;
 use pnet::transport::TransportProtocol::Ipv4;
-use pnet::transport::{transport_channel, TransportSender};
+use pnet::transport::{transport_channel, ipv4_packet_iter, TransportSender, TransportReceiver};
 
-use pnet::transport::TransportChannelType::Layer4;
+use pnet::transport::TransportChannelType::{Layer3, Layer4};
 
 use std::net::Ipv4Addr;
 
 use std::cell::RefCell;
 
 pub struct IcmpReader {
-    reader: RefCell<Box<DataLinkReceiver>>,
+    reader: RefCell<TransportReceiver>,
     writer: RefCell<IcmpWriter>,
 }
 
 impl IcmpReader {
     pub fn new() -> IcmpReader {
-        let iface_name = "enp0s3";
-        // Find the network interface with the provided name
-        let interfaces = datalink::interfaces();
-
-        let interface_names_match = |iface: &NetworkInterface| iface.name == iface_name;
-        let interface = interfaces
-            .into_iter()
-            .filter(interface_names_match)
-            .next()
-            .unwrap();
-
-        // Create a channel to receive on
-        let (_, rx) = match datalink::channel(&interface, Default::default()) {
-            Ok(Ethernet(tx, rx)) => (tx, rx),
-            Ok(_) => panic!("packetdump: unhandled channel type: {}"),
-            Err(e) => panic!("packetdump: unable to create channel: {}", e),
+        let protocol = Layer3(IpNextHeaderProtocols::Icmp);
+        let (_, rx) = match transport_channel(4096, protocol) {
+            Ok((tx, rx)) => (tx, rx),
+            Err(e) => panic!(
+                "An error occurred when creating the transport channel:
+                            {}",
+                e
+            ),
         };
+
         return IcmpReader {
             reader: RefCell::new(rx),
-            writer: RefCell::new(IcmpWriter::new(iface_name)),
+            writer: RefCell::new(IcmpWriter::new("asd")),
         };
     }
 
     pub fn run(&mut self) {
         let mut reader = self.reader.try_borrow_mut().unwrap();
+        let mut reader = ipv4_packet_iter(&mut reader);
         loop {
             let packet = reader.next();
+            println!("asd");
             match packet {
-                Ok(packet) => {
-                    self.process_data(packet);
+                Ok((packet, _)) => {
+                    self.process_ipv4(&packet);
                 }
                 Err(_) => {}
             }
         }
     }
 
-    fn process_data(&self, packet: &[u8]) {
-        let ethernet = EthernetPacket::new(packet).unwrap();
-        self.process_ethernet(&ethernet);
-    }
-
-    fn process_ethernet(&self, packet: &EthernetPacket) {
-        match packet.get_ethertype() {
-            EtherTypes::Ipv4 => {
-                self.process_ipv4(packet.payload());
-            }
+    fn process_ipv4(&self, packet: &Ipv4Packet) {
+        match packet.get_next_level_protocol() {
+            IpNextHeaderProtocols::Icmp => self.process_icmp4(packet.payload(), &packet),
             _ => {}
-        }
-    }
-
-    fn process_ipv4(&self, packet: &[u8]) {
-        let header = Ipv4Packet::new(packet);
-        if let Some(header) = header {
-            match header.get_next_level_protocol() {
-                IpNextHeaderProtocols::Icmp => self.process_icmp4(header.payload(), &header),
-                _ => {}
-            }
         }
     }
 
@@ -128,6 +102,9 @@ impl IcmpWriter {
 
     fn send_icmp(&mut self) {
         let mut buffer = [0; 8 + 2];
+        {
+            
+        }
         {
             let mut icmp = echo_request::MutableEchoRequestPacket::new(&mut buffer).unwrap();
             icmp.set_icmp_type(IcmpTypes::EchoRequest);
