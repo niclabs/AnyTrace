@@ -21,7 +21,7 @@ pub struct IcmpReader {
 impl IcmpReader {
     pub fn new() -> IcmpReader {
         let protocol = Layer3(IpNextHeaderProtocols::Icmp);
-        let (_, rx) = match transport_channel(4096, protocol) {
+        let (tx, rx) = match transport_channel(4096, protocol) {
             Ok((tx, rx)) => (tx, rx),
             Err(e) => panic!(
                 "An error occurred when creating the transport channel:
@@ -32,7 +32,7 @@ impl IcmpReader {
 
         return IcmpReader {
             reader: RefCell::new(rx),
-            writer: RefCell::new(IcmpWriter::new("asd")),
+            writer: RefCell::new(IcmpWriter::new(tx)),
         };
     }
 
@@ -41,7 +41,6 @@ impl IcmpReader {
         let mut reader = ipv4_packet_iter(&mut reader);
         loop {
             let packet = reader.next();
-            println!("asd");
             match packet {
                 Ok((packet, _)) => {
                     self.process_ipv4(&packet);
@@ -86,7 +85,9 @@ pub struct IcmpWriter {
 }
 
 impl IcmpWriter {
-    fn new(_: &str) -> IcmpWriter {
+    fn new(_tx: TransportSender) -> IcmpWriter {
+        // TODO: Transformar de Layer4 a Layer3
+        // Utilizar IP dada por configuración
         let protocol = Layer4(Ipv4(IpNextHeaderProtocols::Icmp));
         let (tx, _) = match transport_channel(4096, protocol) {
             Ok((tx, rx)) => (tx, rx),
@@ -102,9 +103,6 @@ impl IcmpWriter {
 
     fn send_icmp(&mut self) {
         let mut buffer = [0; 8 + 2];
-        {
-            
-        }
         {
             let mut icmp = echo_request::MutableEchoRequestPacket::new(&mut buffer).unwrap();
             icmp.set_icmp_type(IcmpTypes::EchoRequest);
