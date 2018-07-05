@@ -3,11 +3,11 @@ extern crate pnet;
 use pnet::packet::Packet;
 use pnet::packet::icmp::{checksum, echo_request, IcmpPacket, IcmpTypes, MutableIcmpPacket};
 use pnet::packet::ip::IpNextHeaderProtocols;
-use pnet::packet::ipv4::Ipv4Packet;
-use pnet::transport::TransportProtocol::Ipv4;
+use pnet::packet::ipv4;
+use pnet::packet::ipv4::{Ipv4Packet, MutableIpv4Packet};
 use pnet::transport::{transport_channel, ipv4_packet_iter, TransportSender, TransportReceiver};
 
-use pnet::transport::TransportChannelType::{Layer3, Layer4};
+use pnet::transport::TransportChannelType::Layer3;
 
 use std::net::Ipv4Addr;
 
@@ -39,6 +39,7 @@ impl IcmpReader {
     pub fn run(&mut self) {
         let mut reader = self.reader.try_borrow_mut().unwrap();
         let mut reader = ipv4_packet_iter(&mut reader);
+        self.writer.try_borrow_mut().unwrap().send_icmp();
         loop {
             let packet = reader.next();
             match packet {
@@ -63,6 +64,8 @@ impl IcmpReader {
             match icmp.get_icmp_type() {
                 IcmpTypes::EchoReply => {
                     println!("Reply");
+                    println!("{:?}", header.packet());
+                    //self.writer.try_borrow_mut().unwrap().send_icmp();
                 }
                 IcmpTypes::TimeExceeded => {
                     let src = Ipv4Addr::from(header.get_source());
@@ -71,8 +74,9 @@ impl IcmpReader {
                 IcmpTypes::EchoRequest => {
                     //let request = echo_request::EchoRequestPacket::new(&packet).unwrap();
                     println!("Request Sent");
+                    println!("{:?}", header.packet());
                     let _src = Ipv4Addr::from(header.get_source());
-                    self.writer.try_borrow_mut().unwrap().send_icmp();
+                    //self.writer.try_borrow_mut().unwrap().send_icmp();
                 }
                 _ => {}
             }
@@ -85,26 +89,28 @@ pub struct IcmpWriter {
 }
 
 impl IcmpWriter {
-    fn new(_tx: TransportSender) -> IcmpWriter {
-        // TODO: Transformar de Layer4 a Layer3
-        // Utilizar IP dada por configuración
-        let protocol = Layer4(Ipv4(IpNextHeaderProtocols::Icmp));
-        let (tx, _) = match transport_channel(4096, protocol) {
-            Ok((tx, rx)) => (tx, rx),
-            Err(e) => panic!(
-                "An error occurred when creating the transport channel:
-                            {}",
-                e
-            ),
-        };
-
+    fn new(tx: TransportSender) -> IcmpWriter {
         return IcmpWriter { tx: tx };
     }
 
     fn send_icmp(&mut self) {
-        let mut buffer = [0; 8 + 2];
+        let mut buffer = [0; 20 + 8 + 2];
+        Self::format_icmp(&mut buffer[20..]);
+        Self::format_ipv4(&mut buffer);
+
+        println!("Sending {:?}", buffer);
+        match self.tx.send_to(
+            Ipv4Packet::new(&buffer).unwrap(),
+            "1.1.1.1".parse().unwrap(),
+        ) {
+            Ok(_) => println!("ok"),
+            Err(e) => panic!("failed to send packet: {}", e),
+        };
+    }
+
+    fn format_icmp(buffer: &mut [u8]) {
         {
-            let mut icmp = echo_request::MutableEchoRequestPacket::new(&mut buffer).unwrap();
+            let mut icmp = echo_request::MutableEchoRequestPacket::new(buffer).unwrap();
             icmp.set_icmp_type(IcmpTypes::EchoRequest);
             icmp.set_icmp_code(echo_request::IcmpCodes::NoCode);
             icmp.set_identifier(1);
@@ -112,18 +118,26 @@ impl IcmpWriter {
             icmp.set_payload(b"mt"); // TODO: Add timestamp
         }
         {
-            let mut icmp = MutableIcmpPacket::new(&mut buffer).unwrap();
+            let mut icmp = MutableIcmpPacket::new(buffer).unwrap();
             let check = checksum(&icmp.to_immutable());
             icmp.set_checksum(check);
         }
+    }
 
-        println!("Sended {:?}", buffer);
-        match self.tx.send_to(
-            IcmpPacket::new(&buffer).unwrap(),
-            "127.0.0.1".parse().unwrap(),
-        ) {
-            Ok(_) => println!("ok"),
-            Err(e) => panic!("failed to send packet: {}", e),
-        };
+    fn format_ipv4(buffer: &mut [u8]) {
+        let length = buffer.len() as u16;
+		let mut ipv4 = MutableIpv4Packet::new(buffer).unwrap();
+		ipv4.set_version(4);
+        ipv4.set_header_length(5);
+        ipv4.set_identification(1);
+        ipv4.set_flags(2);
+		ipv4.set_header_length(5);
+		ipv4.set_total_length(length);
+		ipv4.set_ttl(64);
+		ipv4.set_next_level_protocol(IpNextHeaderProtocols::Icmp);
+		ipv4.set_source("10.0.2.15".parse().unwrap());
+		ipv4.set_destination("1.1.1.1".parse().unwrap());
+		let checksum = ipv4::checksum(&ipv4.to_immutable());
+		ipv4.set_checksum(checksum);
     }
 }
