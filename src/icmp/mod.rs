@@ -22,7 +22,11 @@ impl IcmpHandler {
     }
 
     pub fn run(&mut self) {
-        self.writer.send_icmp();
-        self.reader.run();
+        let target : Ipv4Addr = "172.30.65.176".parse().unwrap();
+        for _ in 0..1000000 {
+            self.writer.send_icmp(target);
+        }
+        println!("ended");
+        //self.reader.run();
     }
 }
