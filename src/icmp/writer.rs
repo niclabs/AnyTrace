@@ -10,20 +10,26 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use std::mem::transmute;
 
+use std::net::Ipv4Addr;
+
 pub struct IcmpWriter {
     tx: TransportSender,
+    local: Ipv4Addr,
 }
 
 impl IcmpWriter {
-    pub fn new(tx: TransportSender) -> IcmpWriter {
-        return IcmpWriter { tx: tx };
+    pub fn new(tx: TransportSender, local: Ipv4Addr) -> IcmpWriter {
+        return IcmpWriter { 
+            tx: tx,
+            local: local,
+        };
     }
 
     pub fn send_icmp(&mut self) {
         // Buffer is [20 ipv4, 8 ICMP, 10 Payload]
         let mut buffer = [0; 20 + 8 + 10];
         Self::format_icmp(&mut buffer[20..]);
-        Self::format_ipv4(&mut buffer);
+        self.format_ipv4(&mut buffer);
 
         println!("Sending {:?}", &buffer as &[u8]);
         match self.tx.send_to(
@@ -57,7 +63,7 @@ impl IcmpWriter {
         }
     }
 
-    fn format_ipv4(buffer: &mut [u8]) {
+    fn format_ipv4(&self, buffer: &mut [u8]) {
         let length = buffer.len() as u16;
         let mut ipv4 = MutableIpv4Packet::new(buffer).unwrap();
         ipv4.set_version(4);
@@ -68,7 +74,7 @@ impl IcmpWriter {
         ipv4.set_total_length(length);
         ipv4.set_ttl(64);
         ipv4.set_next_level_protocol(IpNextHeaderProtocols::Icmp);
-        ipv4.set_source("10.0.2.15".parse().unwrap());
+        ipv4.set_source(self.local);
         ipv4.set_destination("1.1.1.1".parse().unwrap());
         let checksum = ipv4::checksum(&ipv4.to_immutable());
         println!("checksum: {:?}", checksum);

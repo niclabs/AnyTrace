@@ -17,10 +17,11 @@ use icmp::writer::IcmpWriter;
 pub struct IcmpReader {
     reader: RefCell<TransportReceiver>,
     writer: RefCell<IcmpWriter>,
+    _local: Ipv4Addr,
 }
 
 impl IcmpReader {
-    pub fn new() -> IcmpReader {
+    pub fn new(local: Ipv4Addr) -> IcmpReader {
         let protocol = Layer3(IpNextHeaderProtocols::Icmp);
         let (tx, rx) = match transport_channel(4096, protocol) {
             Ok((tx, rx)) => (tx, rx),
@@ -33,7 +34,8 @@ impl IcmpReader {
 
         return IcmpReader {
             reader: RefCell::new(rx),
-            writer: RefCell::new(IcmpWriter::new(tx)),
+            writer: RefCell::new(IcmpWriter::new(tx, local)),
+            _local: local,
         };
     }
 
