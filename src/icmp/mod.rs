@@ -13,24 +13,25 @@ pub struct IcmpHandler {
 
 impl IcmpHandler {
     pub fn new(localip: &str) -> IcmpHandler {
-        let local : Ipv4Addr = localip.parse().unwrap();
+        let local: Ipv4Addr = localip.parse().unwrap();
         let (reader, writer) = IcmpReader::new(local);
         return IcmpHandler {
             reader: reader,
             writer: writer,
-        }
+        };
     }
 
     pub fn run(&mut self) {
         let read = self.reader.run();
-        let target : Ipv4Addr = "1.1.1.1".parse().unwrap();
+        let write = self.writer.run();
+        let target: Ipv4Addr = "1.1.1.1".parse().unwrap();
         for _ in 0..10 {
-            //self.writer.send_icmp(target);
+            write.send(self.writer.request(target)).unwrap();
         }
         use std::{thread, time};
         thread::sleep(time::Duration::from_millis(10000));
-        while let Ok(_) = read.try_recv() {
-            println!("x");
+        while let Ok(packet) = read.try_recv() {
+            println!("{:?}, {:?}", packet.source, packet.ttl);
         }
 
         println!("ended");

@@ -4,38 +4,72 @@ use pnet::packet::icmp::{checksum, echo_request, IcmpTypes, MutableIcmpPacket};
 use pnet::packet::ip::IpNextHeaderProtocols;
 use pnet::packet::ipv4;
 use pnet::packet::ipv4::{Ipv4Packet, MutableIpv4Packet};
-use pnet::transport::{TransportSender};
+use pnet::transport::TransportSender;
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use std::mem::transmute;
 
-use std::net::{Ipv4Addr, IpAddr};
+use std::net::{IpAddr, Ipv4Addr};
+
+use std::sync::mpsc;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::thread;
 
 pub struct IcmpWriter {
-    tx: TransportSender,
+    tx: Arc<Mutex<TransportSender>>,
     local: Ipv4Addr,
+}
+
+pub struct IcmpRequest {
+    target: Ipv4Addr,
+    ttl: u8,
 }
 
 impl IcmpWriter {
     pub fn new(tx: TransportSender, local: Ipv4Addr) -> IcmpWriter {
-        return IcmpWriter { 
-            tx: tx,
+        return IcmpWriter {
+            tx: Arc::new(Mutex::new(tx)),
             local: local,
         };
     }
 
-    pub fn send_icmp(&mut self, target: Ipv4Addr) {
+    pub fn request(&self, target: Ipv4Addr) -> IcmpRequest {
+        return IcmpRequest {
+            target: target,
+            ttl: 64,
+        };
+    }
+
+    pub fn run(&mut self) -> mpsc::Sender<IcmpRequest> {
+        let tx = self.tx.clone();
+        let (sender, receiver) = mpsc::channel::<IcmpRequest>();
+
+        let local = self.local.clone();
+        thread::spawn(move || {
+            let lock = tx.try_lock();
+            match lock {
+                Err(_) => panic!("You can only call IcmpWriter::run once"),
+                Ok(mut transport) => {
+                    while let Ok(request) = receiver.recv() {
+                        Self::send_icmp(&mut transport, local, request.target);
+                    }
+                }
+            }
+        });
+
+        return sender;
+    }
+
+    fn send_icmp(tx: &mut TransportSender, src: Ipv4Addr, target: Ipv4Addr) {
         // Buffer is [20 ipv4, 8 ICMP, 10 Payload]
         let mut buffer = [0; 20 + 8 + 10];
         Self::format_icmp(&mut buffer[20..]);
-        self.format_ipv4(&mut buffer, target);
+        Self::format_ipv4(&mut buffer, src, target);
 
-        match self.tx.send_to(
-            Ipv4Packet::new(&buffer).unwrap(),
-            IpAddr::V4(target),
-        ) {
-            Ok(_) => {},
+        match tx.send_to(Ipv4Packet::new(&buffer).unwrap(), IpAddr::V4(target)) {
+            Ok(_) => {}
             Err(e) => println!("failed to send packet: {}", e),
         };
     }
@@ -62,7 +96,7 @@ impl IcmpWriter {
         }
     }
 
-    fn format_ipv4(&self, buffer: &mut [u8], target: Ipv4Addr) {
+    fn format_ipv4(buffer: &mut [u8], src: Ipv4Addr, target: Ipv4Addr) {
         let length = buffer.len() as u16;
         let mut ipv4 = MutableIpv4Packet::new(buffer).unwrap();
         ipv4.set_version(4);
@@ -73,7 +107,7 @@ impl IcmpWriter {
         ipv4.set_total_length(length);
         ipv4.set_ttl(64);
         ipv4.set_next_level_protocol(IpNextHeaderProtocols::Icmp);
-        ipv4.set_source(self.local);
+        ipv4.set_source(src);
         ipv4.set_destination(target);
         let checksum = ipv4::checksum(&ipv4.to_immutable());
         ipv4.set_checksum(checksum);

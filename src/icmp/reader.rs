@@ -21,7 +21,7 @@ use std::thread;
 
 pub struct IcmpReader {
     reader: Arc<Mutex<TransportReceiver>>,
-    _local: Ipv4Addr,
+    local: Ipv4Addr,
 }
 
 pub struct IcmpResponce {
@@ -45,7 +45,7 @@ impl IcmpReader {
         return (
             IcmpReader {
                 reader: Arc::new(Mutex::new(rx)),
-                _local: local,
+                local: local,
             },
             IcmpWriter::new(tx, local),
         );
@@ -53,7 +53,7 @@ impl IcmpReader {
 
     pub fn run(&mut self) -> mpsc::Receiver<IcmpResponce> {
         let reader = self.reader.clone();
-        let local = self._local;
+        let local = self.local;
 
         let (sender, receiver) = mpsc::channel::<IcmpResponce>();
         thread::spawn(move || {
