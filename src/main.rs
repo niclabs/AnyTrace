@@ -1,7 +1,7 @@
 extern crate pnet;
 
 mod icmp;
-use icmp::IcmpReader;
+use icmp::IcmpHandler;
 
 /*
 fn send_udp() -> std::io::Result<()> {
@@ -21,9 +21,5 @@ fn send_udp() -> std::io::Result<()> {
 */
 
 fn main() {
-    // -> std::io::Result<()> {
-    //receive_icmp();
-    //send_udp();
-    //send_icmp();
-    IcmpReader::new().run();
+    IcmpHandler::new("10.0.2.15").run();
 }
