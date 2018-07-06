@@ -20,8 +20,7 @@ use std::sync::Mutex;
 use std::thread;
 
 pub struct IcmpReader {
-    reader: Arc<Mutex<TransportReceiver>>,
-    local: Ipv4Addr,
+    pub reader: mpsc::Receiver<IcmpResponce>,
 }
 
 pub struct IcmpResponce {
@@ -44,34 +43,27 @@ impl IcmpReader {
 
         return (
             IcmpReader {
-                reader: Arc::new(Mutex::new(rx)),
-                local: local,
+                reader: Self::run(local, rx),
             },
             IcmpWriter::new(tx, local),
         );
     }
 
-    pub fn run(&mut self) -> mpsc::Receiver<IcmpResponce> {
-        let reader = self.reader.clone();
-        let local = self.local;
-
+    fn run(local: Ipv4Addr, reader: TransportReceiver) -> mpsc::Receiver<IcmpResponce> {
         let (sender, receiver) = mpsc::channel::<IcmpResponce>();
+        let reader = Arc::new(Mutex::new(reader));
         thread::spawn(move || {
-            match reader.try_lock() {
-                Err(_) => panic!("You are not allowd to call IcmpReader::run() Twice"),
-                Ok(mut lock) => {
-                    let mut iter = ipv4_packet_iter(&mut lock);
-                    loop {
-                        let packet = iter.next();
-                        if let Ok((packet, _)) = packet {
-                            if let Err(_) = Self::process_ipv4(&packet, local, &sender) {
-                                // Channel is closed, exit
-                                return;
-                            }
-                        }
+            let mut reader = reader.lock().unwrap();
+            let mut iter = ipv4_packet_iter(&mut reader);
+            loop {
+                let packet = iter.next();
+                if let Ok((packet, _)) = packet {
+                    if let Err(_) = Self::process_ipv4(&packet, local, &sender) {
+                        // Channel is closed, exit
+                        return;
                     }
                 }
-            };
+            }
         });
 
         return receiver;

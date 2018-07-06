@@ -22,15 +22,13 @@ impl IcmpHandler {
     }
 
     pub fn run(&mut self) {
-        let read = self.reader.run();
-        let write = self.writer.run();
         let target: Ipv4Addr = "1.1.1.1".parse().unwrap();
         for _ in 0..10 {
-            write.send(self.writer.request(target)).unwrap();
+            self.writer.send(target);
         }
         use std::{thread, time};
         thread::sleep(time::Duration::from_millis(10000));
-        while let Ok(packet) = read.try_recv() {
+        while let Ok(packet) = self.reader.reader.try_recv() {
             println!("{:?}, {:?}", packet.source, packet.ttl);
         }
 
