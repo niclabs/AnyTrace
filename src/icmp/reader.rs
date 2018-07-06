@@ -1,12 +1,12 @@
 extern crate pnet;
 
-use pnet::packet::Packet;
-use pnet::packet::icmp::{IcmpPacket, IcmpTypes};
 use pnet::packet::icmp::echo_reply::{EchoReply, EchoReplyPacket};
+use pnet::packet::icmp::{IcmpPacket, IcmpTypes};
 use pnet::packet::ip::IpNextHeaderProtocols;
 use pnet::packet::ipv4::Ipv4Packet;
 use pnet::packet::FromPacket;
-use pnet::transport::{transport_channel, TransportReceiver, ipv4_packet_iter};
+use pnet::packet::Packet;
+use pnet::transport::{ipv4_packet_iter, transport_channel, TransportReceiver};
 
 use pnet::transport::TransportChannelType::Layer3;
 
@@ -14,10 +14,10 @@ use std::net::Ipv4Addr;
 
 use icmp::writer::IcmpWriter;
 
-use std::thread;
 use std::sync::mpsc;
-use std::sync::Mutex;
 use std::sync::Arc;
+use std::sync::Mutex;
+use std::thread;
 
 pub struct IcmpReader {
     reader: Arc<Mutex<TransportReceiver>>,
@@ -42,10 +42,13 @@ impl IcmpReader {
             ),
         };
 
-        return (IcmpReader {
-            reader: Arc::new(Mutex::new(rx)),
-            _local: local,
-        }, IcmpWriter::new(tx, local));
+        return (
+            IcmpReader {
+                reader: Arc::new(Mutex::new(rx)),
+                _local: local,
+            },
+            IcmpWriter::new(tx, local),
+        );
     }
 
     pub fn run(&mut self) -> mpsc::Receiver<IcmpResponce> {
@@ -68,20 +71,29 @@ impl IcmpReader {
                         }
                     }
                 }
-            };          
+            };
         });
 
         return receiver;
     }
 
-    fn process_ipv4(packet: &Ipv4Packet, local: Ipv4Addr, sender: &mpsc::Sender<IcmpResponce>) -> Result<(), ()> {
+    fn process_ipv4(
+        packet: &Ipv4Packet,
+        local: Ipv4Addr,
+        sender: &mpsc::Sender<IcmpResponce>,
+    ) -> Result<(), ()> {
         if packet.get_next_level_protocol() == IpNextHeaderProtocols::Icmp {
-             return Self::process_icmp4(packet.payload(), &packet, local, sender)
+            return Self::process_icmp4(packet.payload(), &packet, local, sender);
         }
         return Ok(());
     }
 
-    fn process_icmp4(packet: &[u8], header: &Ipv4Packet, _local: Ipv4Addr, sender: &mpsc::Sender<IcmpResponce>) -> Result<(), ()> {
+    fn process_icmp4(
+        packet: &[u8],
+        header: &Ipv4Packet,
+        _local: Ipv4Addr,
+        sender: &mpsc::Sender<IcmpResponce>,
+    ) -> Result<(), ()> {
         let icmp_packet = IcmpPacket::new(packet);
         if let Some(icmp) = icmp_packet {
             match icmp.get_icmp_type() {
@@ -108,7 +120,7 @@ impl IcmpReader {
                     let _src = Ipv4Addr::from(header.get_source());
                     //self.writer.try_borrow_mut().unwrap().send_icmp();
                 }
-                _ => {},           
+                _ => {}
             }
         }
         return Ok(());
