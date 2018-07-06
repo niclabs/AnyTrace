@@ -1,18 +1,15 @@
 extern crate pnet;
 
 use pnet::packet::icmp::echo_reply::{EchoReply, EchoReplyPacket};
+use pnet::packet::icmp::time_exceeded::{TimeExceeded, TimeExceededPacket};
 use pnet::packet::icmp::{IcmpPacket, IcmpTypes};
 use pnet::packet::ip::IpNextHeaderProtocols;
 use pnet::packet::ipv4::Ipv4Packet;
 use pnet::packet::FromPacket;
 use pnet::packet::Packet;
-use pnet::transport::{ipv4_packet_iter, transport_channel, TransportReceiver};
-
-use pnet::transport::TransportChannelType::Layer3;
+use pnet::transport::{ipv4_packet_iter, TransportReceiver};
 
 use std::net::Ipv4Addr;
-
-use icmp::writer::IcmpWriter;
 
 use std::sync::mpsc;
 use std::sync::Arc;
@@ -23,32 +20,25 @@ pub struct IcmpReader {
     pub reader: mpsc::Receiver<IcmpResponce>,
 }
 
+pub enum Responce {
+    Echo(EchoReply),
+    Timeout(TimeExceeded),
+}
+
 pub struct IcmpResponce {
     pub source: Ipv4Addr,
     pub ttl: u8,
-    pub icmp: EchoReply,
+    pub icmp: Responce,
 }
 
 impl IcmpReader {
-    pub fn new(local: Ipv4Addr) -> (IcmpReader, IcmpWriter) {
-        let protocol = Layer3(IpNextHeaderProtocols::Icmp);
-        let (tx, rx) = match transport_channel(4096, protocol) {
-            Ok((tx, rx)) => (tx, rx),
-            Err(e) => panic!(
-                "An error occurred when creating the transport channel:
-                            {}",
-                e
-            ),
+    pub fn new(tx: TransportReceiver, local: Ipv4Addr) -> IcmpReader {
+        return IcmpReader {
+            reader: Self::run(local, tx),
         };
-
-        return (
-            IcmpReader {
-                reader: Self::run(local, rx),
-            },
-            IcmpWriter::new(tx, local),
-        );
     }
 
+    /// Create a new thread and channel to receive requests asynchronously.
     fn run(local: Ipv4Addr, reader: TransportReceiver) -> mpsc::Receiver<IcmpResponce> {
         let (sender, receiver) = mpsc::channel::<IcmpResponce>();
         let reader = Arc::new(Mutex::new(reader));
@@ -69,6 +59,7 @@ impl IcmpReader {
         return receiver;
     }
 
+    /// Parse the IPv4 packet, only continuing if the ICMP protocol was used.
     fn process_ipv4(
         packet: &Ipv4Packet,
         local: Ipv4Addr,
@@ -80,6 +71,7 @@ impl IcmpReader {
         return Ok(());
     }
 
+    /// Parse the ICMP packet and send EchoReply to the channel.
     fn process_icmp4(
         packet: &[u8],
         header: &Ipv4Packet,
@@ -94,23 +86,29 @@ impl IcmpReader {
                         let responce = IcmpResponce {
                             source: Ipv4Addr::from(header.get_source()),
                             ttl: header.get_ttl(),
-                            icmp: icmp.from_packet(),
+                            icmp: Responce::Echo(icmp.from_packet()),
                         };
                         if let Err(_) = sender.send(responce) {
+                            // Return error if the channel is closed.
                             return Err(());
                         }
                     }
                 }
                 IcmpTypes::TimeExceeded => {
-                    let src = Ipv4Addr::from(header.get_source());
-                    println!("TTL exceeded from {:?}", src);
+                    if let Some(icmp) = TimeExceededPacket::new(&packet) {
+                        let responce = IcmpResponce {
+                            source: Ipv4Addr::from(header.get_source()),
+                            ttl: header.get_ttl(),
+                            icmp: Responce::Timeout(icmp.from_packet()),
+                        };
+                        if let Err(_) = sender.send(responce) {
+                            // Return error if the channel is closed.
+                            return Err(());
+                        }
+                    }
                 }
                 IcmpTypes::EchoRequest => {
-                    //let request = echo_request::EchoRequestPacket::new(&packet).unwrap();
-                    println!("Request Sent");
-                    println!("{:?}", header.packet());
-                    let _src = Ipv4Addr::from(header.get_source());
-                    //self.writer.try_borrow_mut().unwrap().send_icmp();
+                    // This is not received unless we parse from the DataLink layer.
                 }
                 _ => {}
             }
