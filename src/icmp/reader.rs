@@ -17,7 +17,7 @@ use std::sync::Mutex;
 use std::thread;
 
 pub struct IcmpReader {
-    pub reader: mpsc::Receiver<IcmpResponce>,
+    reader: mpsc::Receiver<IcmpResponce>,
 }
 
 pub enum Responce {
@@ -36,6 +36,10 @@ impl IcmpReader {
         return IcmpReader {
             reader: Self::run(local, tx),
         };
+    }
+
+    pub fn reader(&self) -> &mpsc::Receiver<IcmpResponce> {
+        return &self.reader;
     }
 
     /// Create a new thread and channel to receive requests asynchronously.

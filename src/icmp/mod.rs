@@ -11,8 +11,8 @@ use pnet::transport::transport_channel;
 use pnet::transport::TransportChannelType::Layer3;
 
 pub struct IcmpHandler {
-    reader: IcmpReader,
-    writer: IcmpWriter,
+    pub reader: IcmpReader,
+    pub writer: IcmpWriter,
 }
 
 impl IcmpHandler {
@@ -26,20 +26,6 @@ impl IcmpHandler {
             reader: reader,
             writer: writer,
         };
-    }
-
-    pub fn run(&mut self) {
-        let target: Ipv4Addr = "1.1.1.1".parse().unwrap();
-        for _ in 0..10 {
-            self.writer.send(target);
-        }
-        use std::{thread, time};
-        thread::sleep(time::Duration::from_millis(10000));
-        while let Ok(packet) = self.reader.reader.try_recv() {
-            println!("{:?}, {:?}", packet.source, packet.ttl);
-        }
-
-        println!("ended");
     }
 
     /// Construct the IcmpReader and IcmpWriter using the given local IPv4 Address.

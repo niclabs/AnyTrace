@@ -2,6 +2,7 @@ extern crate pnet;
 
 mod icmp;
 use icmp::IcmpHandler;
+use std::net::Ipv4Addr;
 
 /*
 fn send_udp() -> std::io::Result<()> {
@@ -21,5 +22,16 @@ fn send_udp() -> std::io::Result<()> {
 */
 
 fn main() {
-    IcmpHandler::new("10.0.2.15").run();
+    let handler = IcmpHandler::new("10.0.2.15");
+    let target: Ipv4Addr = "1.1.1.1".parse().unwrap();
+    for _ in 0..10 {
+        handler.writer.send(target);
+    }
+    use std::{thread, time};
+    thread::sleep(time::Duration::from_millis(10000));
+    while let Ok(packet) = handler.reader.reader().try_recv() {
+        println!("{:?}, {:?}", packet.source, packet.ttl);
+    }
+
+    println!("ended");
 }
