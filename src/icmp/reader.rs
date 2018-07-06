@@ -12,8 +12,6 @@ use pnet::transport::TransportChannelType::Layer3;
 
 use std::net::Ipv4Addr;
 
-use std::cell::RefCell;
-
 use icmp::writer::IcmpWriter;
 
 use std::thread;
@@ -22,13 +20,14 @@ use std::sync::Mutex;
 use std::sync::Arc;
 
 pub struct IcmpReader {
-    reader: Arc<Mutex<RefCell<TransportReceiver>>>,
+    reader: Arc<Mutex<TransportReceiver>>,
     _local: Ipv4Addr,
 }
 
 pub struct IcmpResponce {
-    source: Ipv4Addr,
-    icmp: EchoReply,
+    pub source: Ipv4Addr,
+    pub ttl: u8,
+    pub icmp: EchoReply,
 }
 
 impl IcmpReader {
@@ -44,7 +43,7 @@ impl IcmpReader {
         };
 
         return (IcmpReader {
-            reader: Arc::new(Mutex::new(RefCell::new(rx))),
+            reader: Arc::new(Mutex::new(rx)),
             _local: local,
         }, IcmpWriter::new(tx, local));
     }
@@ -57,9 +56,8 @@ impl IcmpReader {
         thread::spawn(move || {
             match reader.try_lock() {
                 Err(_) => panic!("You are not allowd to call IcmpReader::run() Twice"),
-                Ok(lock) => {
-                    let mut borrowed = lock.try_borrow_mut().unwrap();
-                    let mut iter = ipv4_packet_iter(&mut borrowed);
+                Ok(mut lock) => {
+                    let mut iter = ipv4_packet_iter(&mut lock);
                     loop {
                         let packet = iter.next();
                         if let Ok((packet, _)) = packet {
@@ -83,7 +81,7 @@ impl IcmpReader {
         return Ok(());
     }
 
-    fn process_icmp4(packet: &[u8], header: &Ipv4Packet, local: Ipv4Addr, sender: &mpsc::Sender<IcmpResponce>) -> Result<(), ()> {
+    fn process_icmp4(packet: &[u8], header: &Ipv4Packet, _local: Ipv4Addr, sender: &mpsc::Sender<IcmpResponce>) -> Result<(), ()> {
         let icmp_packet = IcmpPacket::new(packet);
         if let Some(icmp) = icmp_packet {
             match icmp.get_icmp_type() {
@@ -91,9 +89,10 @@ impl IcmpReader {
                     if let Some(icmp) = EchoReplyPacket::new(&packet) {
                         let responce = IcmpResponce {
                             source: Ipv4Addr::from(header.get_source()),
+                            ttl: header.get_ttl(),
                             icmp: icmp.from_packet(),
                         };
-                        if let Err(e) = sender.send(responce) {
+                        if let Err(_) = sender.send(responce) {
                             return Err(());
                         }
                     }
