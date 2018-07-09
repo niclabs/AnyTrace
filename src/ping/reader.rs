@@ -2,6 +2,8 @@ extern crate pnet;
 
 use pnet::packet::FromPacket;
 use pnet::packet::Packet;
+use pnet::packet::icmp::destination_unreachable::{DestinationUnreachable,
+                                                  DestinationUnreachablePacket};
 use pnet::packet::icmp::echo_reply::{EchoReply, EchoReplyPacket};
 use pnet::packet::icmp::time_exceeded::{TimeExceeded, TimeExceededPacket};
 use pnet::packet::icmp::{IcmpPacket, IcmpTypes};
@@ -23,6 +25,7 @@ pub struct PingReader {
 pub enum Responce {
     Echo(EchoReply),
     Timeout(TimeExceeded),
+    Unreachable(DestinationUnreachable),
 }
 
 pub struct IcmpResponce {
@@ -110,7 +113,20 @@ impl PingReader {
                             return Err(());
                         }
                     }
-                },
+                }
+                IcmpTypes::DestinationUnreachable => {
+                    if let Some(icmp) = DestinationUnreachablePacket::new(&packet) {
+                        let responce = IcmpResponce {
+                            source: Ipv4Addr::from(header.get_source()),
+                            ttl: header.get_ttl(),
+                            icmp: Responce::Unreachable(icmp.from_packet()),
+                        };
+                        if let Err(_) = sender.send(responce) {
+                            // Return error if the channel is closed.
+                            return Err(());
+                        }
+                    }
+                }
                 IcmpTypes::EchoRequest => {
                     // This is not received unless we parse from the DataLink layer.
                 }

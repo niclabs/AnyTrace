@@ -28,7 +28,7 @@ fn main() {
     for _ in 0..10 {
         handler.writer.send(target);
     }
- 
+
     while let Ok(packet) = handler
         .reader
         .reader()
@@ -44,6 +44,9 @@ fn main() {
             ping::Responce::Timeout(_packet) => {
                 // The payload contains the EchoRequest packet + 64 bytes of payload
                 println!("Received timeout");
+            }
+            ping::Responce::Unreachable(_packet) => {
+                println!("Received unreachable");
             }
         }
     }

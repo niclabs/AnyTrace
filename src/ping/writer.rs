@@ -60,20 +60,36 @@ impl PingWriter {
 
     /// Send an ICMP request with the given parameters
     pub fn send_icmp(&self, target: Ipv4Addr, ttl: u8, identifier: u16, sequence: u16) {
-        assert_eq!(self.method, PingMethod::ICMP, "Calling send_udp is not allowed when the method is not PingMethod::ICMP");
+        assert_eq!(
+            self.method,
+            PingMethod::ICMP,
+            "Calling send_udp is not allowed when the method is not PingMethod::ICMP"
+        );
         self.send_complete(target, 0, 0, ttl, identifier, sequence)
     }
 
-    /// Send an UDP request with the given parameters 
+    /// Send an UDP request with the given parameters
     pub fn send_udp(&self, target: Ipv4Addr, ttl: u8, src_port: u16, dst_port: u16) {
-        assert_eq!(self.method, PingMethod::UDP, "Calling send_udp is not allowed when the method is PingMethod::UDP");
+        assert_eq!(
+            self.method,
+            PingMethod::UDP,
+            "Calling send_udp is not allowed when the method is PingMethod::UDP"
+        );
         self.send_complete(target, src_port, dst_port, ttl, 0, 0);
     }
 
     /// Send the Echo request to the ipv4 target asynchronously with the given parameters.
     ///
     /// The payload will contain the timestamp in milliseconds, followed by the character 'mt'.
-    pub fn send_complete(&self, target: Ipv4Addr, src_port: u16, dst_port: u16, ttl: u8, identifier: u16, sequence: u16) {
+    pub fn send_complete(
+        &self,
+        target: Ipv4Addr,
+        src_port: u16,
+        dst_port: u16,
+        ttl: u8,
+        identifier: u16,
+        sequence: u16,
+    ) {
         self.writer
             .send(PingRequest {
                 target: target,
@@ -87,8 +103,7 @@ impl PingWriter {
     }
 
     /// Create a new thread and a channel to receive requests asynchronously.
-    fn run(tx: TransportSender, local: Ipv4Addr, method: PingMethod) -> mpsc::Sender<PingRequest>
-    {
+    fn run(tx: TransportSender, local: Ipv4Addr, method: PingMethod) -> mpsc::Sender<PingRequest> {
         let tx = Arc::new(Mutex::new(tx));
         let (sender, receiver) = mpsc::channel::<PingRequest>();
         let process = match method {
