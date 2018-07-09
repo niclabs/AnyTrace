@@ -6,8 +6,10 @@ use std::net::Ipv4Addr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 fn main() {
-    let handler = PingHandler::new("10.0.2.15", PingMethod::ICMP);
-    let target: Ipv4Addr = "1.1.122.12".parse().unwrap();
+    let localip = "10.0.2.15";
+    let handler = PingHandler::new(localip, PingMethod::UDP);
+
+    let target: Ipv4Addr = "1.1.1.1".parse().unwrap();
     for _ in 0..10 {
         handler.writer.send(target);
     }
@@ -21,7 +23,7 @@ fn main() {
         match packet.icmp {
             ping::Responce::Echo(packet) => {
                 if let Ok(ts) = PingHandler::get_packet_timestamp_ms(&packet.payload, true) {
-                    println!("Parsed correctly, delta: {}", time_from_epoch_ms() - ts);
+                    println!("Parsed correctly, delta(ms): {}", time_from_epoch_ms() - ts);
                 }
             }
             ping::Responce::Timeout(_packet) => {
