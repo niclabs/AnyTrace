@@ -1,13 +1,13 @@
 extern crate pnet;
+extern crate ping;
 
-mod ping;
 use ping::{PingHandler, PingMethod};
 use std::net::Ipv4Addr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 fn main() {
-    let handler = PingHandler::new("172.30.65.31", PingMethod::ICMP);
-    let target: Ipv4Addr = "1.1.1.1".parse().unwrap();
+    let handler = PingHandler::new("10.0.2.15", PingMethod::ICMP);
+    let target: Ipv4Addr = "1.1.122.12".parse().unwrap();
     for _ in 0..10 {
         handler.writer.send(target);
     }
@@ -17,7 +17,7 @@ fn main() {
         .reader()
         .recv_timeout(Duration::from_millis(2000))
     {
-        println!("{:?}, {:?}", packet.source, packet.ttl);
+        print!("{:?}, {:?}: ", packet.source, packet.ttl);
         match packet.icmp {
             ping::Responce::Echo(packet) => {
                 if let Ok(ts) = PingHandler::get_packet_timestamp_ms(&packet.payload, true) {

@@ -1,10 +1,9 @@
 [package]
-name = "trace"
+name = "ping"
 version = "0.1.0"
 authors = ["Felipe <fdns@niclabs.cl>"]
 
 [dependencies]
-ping = { path = "./ping" }
 
 [dependencies.pnet]
 git = "https://github.com/libpnet/libpnet/"

@@ -163,6 +163,7 @@ impl PingWriter {
             request.target,
             request.ttl,
         );
+
         match tx.send_to(
             Ipv4Packet::new(&buffer).unwrap(),
             IpAddr::V4(request.target),
