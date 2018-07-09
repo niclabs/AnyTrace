@@ -38,7 +38,7 @@ fn main() {
         println!("{:?}, {:?}", packet.source, packet.ttl);
         match packet.icmp {
             icmp::Responce::Echo(packet) => {
-                if let Ok(ts) = IcmpHandler::get_packet_timestamp_ms(&packet.payload) {
+                if let Ok(ts) = IcmpHandler::get_packet_timestamp_ms(&packet.payload, true) {
                     println!("Parsed correctly, delta: {}", time_from_epoch_ms() - ts);
                 }
             }

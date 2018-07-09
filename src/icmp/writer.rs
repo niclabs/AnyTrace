@@ -75,7 +75,7 @@ impl IcmpWriter {
 
     /// Send a ICMP packet with the given parameters
     fn send_icmp(tx: &mut TransportSender, src: Ipv4Addr, request: IcmpRequest) {
-        // Buffer is [20 ipv4, 8 ICMP, 2+8 Payload]
+        // Buffer is [20 ipv4, 8 ICMP, 8 + 2 Payload]
         let mut buffer = [0; 20 + 8 + 10];
         Self::format_icmp(&mut buffer[20..], request.identifier, request.sequence);
         Self::format_ipv4(&mut buffer, src, request.target, request.ttl);
@@ -92,9 +92,9 @@ impl IcmpWriter {
     ///
     /// The payload of the packet will be the characters 'mt' followed by the u64 timestamp in milliseconds
     fn format_icmp(buffer: &mut [u8], identifier: u16, sequence: u16) {
-        let mut payload = [0u8; 2 + 8];
-        payload[0..2].clone_from_slice(Self::get_payload_key());
-        payload[2..10].clone_from_slice(&Self::u64_to_array(Self::time_from_epoch_ms().to_be()));
+        let mut payload = [0u8; 8 + 2];
+        payload[0..8].clone_from_slice(&Self::u64_to_array(Self::time_from_epoch_ms().to_be()));
+        payload[8..10].clone_from_slice(Self::get_payload_key());
         {
             let mut icmp = echo_request::MutableEchoRequestPacket::new(buffer).unwrap();
             icmp.set_icmp_type(IcmpTypes::EchoRequest);

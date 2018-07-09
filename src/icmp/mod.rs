@@ -45,19 +45,19 @@ impl IcmpHandler {
     }
 
     /// Check the packet payload and get the timestamp
-    pub fn get_packet_timestamp_ms(payload: &[u8]) -> Result<u64, &str> {
+    pub fn get_packet_timestamp_ms(payload: &[u8], check_payload: bool) -> Result<u64, &str> {
         // The packet should be 10 bytes long
         if payload.len() < 10 {
             return Err("Payload is not of length 10");
         }
 
         // Check the payload key
-        if payload[0..2] != *IcmpWriter::get_payload_key() {
+        if check_payload && payload[8..10] != *IcmpWriter::get_payload_key() {
             return Err("Payload key invalid");
         }
 
         // Get the timestamp from the payload and convert it from Big Endian
-        return Ok(u64::from_be(Self::array_to_u64(&payload[2..10])));
+        return Ok(u64::from_be(Self::array_to_u64(&payload[..8])));
     }
 
     fn array_to_u64(data: &[u8]) -> u64 {
