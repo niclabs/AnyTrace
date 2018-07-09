@@ -16,7 +16,7 @@ use std::sync::Mutex;
 use std::sync::mpsc;
 use std::thread;
 
-pub struct IcmpReader {
+pub struct PingReader {
     reader: mpsc::Receiver<IcmpResponce>,
 }
 
@@ -31,9 +31,9 @@ pub struct IcmpResponce {
     pub icmp: Responce,
 }
 
-impl IcmpReader {
-    pub fn new(tx: TransportReceiver, local: Ipv4Addr) -> IcmpReader {
-        return IcmpReader {
+impl PingReader {
+    pub fn new(tx: TransportReceiver, local: Ipv4Addr) -> PingReader {
+        return PingReader {
             reader: Self::run(local, tx),
         };
     }
@@ -110,7 +110,7 @@ impl IcmpReader {
                             return Err(());
                         }
                     }
-                }
+                },
                 IcmpTypes::EchoRequest => {
                     // This is not received unless we parse from the DataLink layer.
                 }

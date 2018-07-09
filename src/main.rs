@@ -1,7 +1,7 @@
 extern crate pnet;
 
-mod icmp;
-use icmp::IcmpHandler;
+mod ping;
+use ping::{PingHandler, PingMethod};
 use std::net::Ipv4Addr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -23,13 +23,12 @@ fn send_udp() -> std::io::Result<()> {
 */
 
 fn main() {
-    let handler = IcmpHandler::new("10.0.2.15");
+    let handler = PingHandler::new("172.30.65.31", PingMethod::ICMP);
     let target: Ipv4Addr = "1.1.1.1".parse().unwrap();
     for _ in 0..10 {
         handler.writer.send(target);
     }
-    handler.writer.send_complete(target, 4, 33, 33);
-
+ 
     while let Ok(packet) = handler
         .reader
         .reader()
@@ -37,19 +36,17 @@ fn main() {
     {
         println!("{:?}, {:?}", packet.source, packet.ttl);
         match packet.icmp {
-            icmp::Responce::Echo(packet) => {
-                if let Ok(ts) = IcmpHandler::get_packet_timestamp_ms(&packet.payload, true) {
+            ping::Responce::Echo(packet) => {
+                if let Ok(ts) = PingHandler::get_packet_timestamp_ms(&packet.payload, true) {
                     println!("Parsed correctly, delta: {}", time_from_epoch_ms() - ts);
                 }
             }
-            icmp::Responce::Timeout(_packet) => {
+            ping::Responce::Timeout(_packet) => {
                 // The payload contains the EchoRequest packet + 64 bytes of payload
                 println!("Received timeout");
             }
         }
     }
-
-    println!("ended");
 }
 
 /// Get the current time in milliseconds

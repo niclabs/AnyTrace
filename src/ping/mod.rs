@@ -1,9 +1,9 @@
 mod reader;
 mod writer;
 
-use self::reader::IcmpReader;
+use self::reader::PingReader;
 pub use self::reader::Responce;
-use self::writer::IcmpWriter;
+use self::writer::PingWriter;
 
 use std::net::Ipv4Addr;
 
@@ -11,26 +11,33 @@ use pnet::packet::ip::IpNextHeaderProtocols;
 use pnet::transport::TransportChannelType::Layer3;
 use pnet::transport::transport_channel;
 
-pub struct IcmpHandler {
-    pub reader: IcmpReader,
-    pub writer: IcmpWriter,
+pub struct PingHandler {
+    pub reader: PingReader,
+    pub writer: PingWriter,
 }
 
-impl IcmpHandler {
-    /// Construct a new IcmpHandler.
+#[derive(PartialEq, Debug, Clone)]
+pub enum PingMethod {
+    ICMP,
+    UDP,
+}
+
+impl PingHandler {
+    /// Construct a new PingHandler.
     ///
-    /// This will write and read the received ICMP packets asynchronously.
-    pub fn new(localip: &str) -> IcmpHandler {
+    /// This will write and read the received packets asynchronously.
+    pub fn new(localip: &str, method: PingMethod) -> PingHandler {
         let local: Ipv4Addr = localip.parse().unwrap();
-        let (reader, writer) = Self::generate_transport(local);
-        return IcmpHandler {
+        let (reader, writer) = Self::generate_transport(local, method);
+        return PingHandler {
             reader: reader,
             writer: writer,
         };
     }
 
-    /// Construct the IcmpReader and IcmpWriter using the given local IPv4 Address.
-    fn generate_transport(local: Ipv4Addr) -> (IcmpReader, IcmpWriter) {
+    /// Construct the PingReader and PingWriter using the given local IPv4 Address.
+    fn generate_transport(local: Ipv4Addr, method: PingMethod) -> (PingReader, PingWriter) {
+        // We use Icmp as transport for Icmp and Udp, as it only filter the received packets
         let protocol = Layer3(IpNextHeaderProtocols::Icmp);
         let (tx, rx) = match transport_channel(4096, protocol) {
             Ok((tx, rx)) => (tx, rx),
@@ -41,7 +48,10 @@ impl IcmpHandler {
             ),
         };
 
-        return (IcmpReader::new(rx, local), IcmpWriter::new(tx, local));
+        return (
+            PingReader::new(rx, local),
+            PingWriter::new(tx, local, method),
+        );
     }
 
     /// Check the packet payload and get the timestamp
@@ -52,7 +62,7 @@ impl IcmpHandler {
         }
 
         // Check the payload key
-        if check_payload && payload[8..10] != *IcmpWriter::get_payload_key() {
+        if check_payload && payload[8..10] != *PingWriter::get_payload_key() {
             return Err("Payload key invalid");
         }
 
