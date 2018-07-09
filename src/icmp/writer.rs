@@ -78,8 +78,7 @@ impl IcmpWriter {
         // Buffer is [20 ipv4, 8 ICMP, 2+8 Payload]
         let mut buffer = [0; 20 + 8 + 10];
         Self::format_icmp(&mut buffer[20..], request.identifier, request.sequence);
-        Self::format_ipv4(&mut buffer, src, request.target);
-
+        Self::format_ipv4(&mut buffer, src, request.target, request.ttl);
         match tx.send_to(
             Ipv4Packet::new(&buffer).unwrap(),
             IpAddr::V4(request.target),
@@ -112,7 +111,7 @@ impl IcmpWriter {
     }
 
     /// Format the buffer IPv4 Header
-    fn format_ipv4(buffer: &mut [u8], src: Ipv4Addr, target: Ipv4Addr) {
+    fn format_ipv4(buffer: &mut [u8], src: Ipv4Addr, target: Ipv4Addr, ttl: u8) {
         let length = buffer.len() as u16;
         let mut ipv4 = MutableIpv4Packet::new(buffer).unwrap();
         ipv4.set_version(4);
@@ -121,7 +120,7 @@ impl IcmpWriter {
         ipv4.set_flags(2);
         ipv4.set_header_length(5);
         ipv4.set_total_length(length);
-        ipv4.set_ttl(64);
+        ipv4.set_ttl(ttl);
         ipv4.set_next_level_protocol(IpNextHeaderProtocols::Icmp);
         ipv4.set_source(src);
         ipv4.set_destination(target);

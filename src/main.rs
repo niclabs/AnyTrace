@@ -28,6 +28,7 @@ fn main() {
     for _ in 0..10 {
         handler.writer.send(target);
     }
+    handler.writer.send_complete(target, 4, 33, 33);
 
     while let Ok(packet) = handler
         .reader
@@ -41,10 +42,9 @@ fn main() {
                     println!("Parsed correctly, delta: {}", time_from_epoch_ms() - ts);
                 }
             }
-            icmp::Responce::Timeout(packet) => {
-                if let Ok(ts) = IcmpHandler::get_packet_timestamp_ms(&packet.payload) {
-                    println!("Parsed correctly, delta: {}", time_from_epoch_ms() - ts);
-                }
+            icmp::Responce::Timeout(_packet) => {
+                // The payload contains the EchoRequest packet + 64 bytes of payload
+                println!("Received timeout");
             }
         }
     }

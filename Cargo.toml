@@ -6,5 +6,5 @@ authors = ["Felipe <fdns@niclabs.cl>"]
 [dependencies]
 
 [dependencies.pnet]
-git = "https://github.com/fdns/libpnet/"
-rev = "c9a9a385f18c11c1a059e1c744f158523086349d"
+git = "https://github.com/libpnet/libpnet/"
+rev = "743e59994b5e3b9d666cc7f7500e37ee7bbde6f7"
