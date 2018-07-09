@@ -8,13 +8,11 @@ use pnet::transport::TransportSender;
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use std::mem::transmute;
-
 use std::net::{IpAddr, Ipv4Addr};
 
-use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::mpsc;
 use std::thread;
 
 pub struct IcmpWriter {
@@ -96,11 +94,8 @@ impl IcmpWriter {
     /// The payload of the packet will be the characters 'mt' followed by the u64 timestamp in milliseconds
     fn format_icmp(buffer: &mut [u8], identifier: u16, sequence: u16) {
         let mut payload = [0u8; 2 + 8];
-        payload[0] = b'm';
-        payload[1] = b't';
-        payload[2..].clone_from_slice(unsafe {
-            &transmute::<u64, [u8; 8]>(Self::time_from_epoch_ms().to_be())
-        });
+        payload[0..2].clone_from_slice(Self::get_payload_key());
+        payload[2..10].clone_from_slice(&Self::u64_to_array(Self::time_from_epoch_ms().to_be()));
         {
             let mut icmp = echo_request::MutableEchoRequestPacket::new(buffer).unwrap();
             icmp.set_icmp_type(IcmpTypes::EchoRequest);
@@ -143,5 +138,22 @@ impl IcmpWriter {
         let in_ms =
             since_the_epoch.as_secs() * 1000 + since_the_epoch.subsec_nanos() as u64 / 1_000_000;
         return in_ms;
+    }
+
+    fn u64_to_array(x: u64) -> [u8; 8] {
+        return [
+            ((x >> 56) & 0xff) as u8,
+            ((x >> 48) & 0xff) as u8,
+            ((x >> 40) & 0xff) as u8,
+            ((x >> 32) & 0xff) as u8,
+            ((x >> 24) & 0xff) as u8,
+            ((x >> 16) & 0xff) as u8,
+            ((x >> 8) & 0xff) as u8,
+            (x & 0xff) as u8,
+        ];
+    }
+
+    pub fn get_payload_key() -> &'static [u8; 2] {
+        return b"mt";
     }
 }

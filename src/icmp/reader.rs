@@ -1,19 +1,19 @@
 extern crate pnet;
 
+use pnet::packet::FromPacket;
+use pnet::packet::Packet;
 use pnet::packet::icmp::echo_reply::{EchoReply, EchoReplyPacket};
 use pnet::packet::icmp::time_exceeded::{TimeExceeded, TimeExceededPacket};
 use pnet::packet::icmp::{IcmpPacket, IcmpTypes};
 use pnet::packet::ip::IpNextHeaderProtocols;
 use pnet::packet::ipv4::Ipv4Packet;
-use pnet::packet::FromPacket;
-use pnet::packet::Packet;
-use pnet::transport::{ipv4_packet_iter, TransportReceiver};
+use pnet::transport::{TransportReceiver, ipv4_packet_iter};
 
 use std::net::Ipv4Addr;
 
-use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::mpsc;
 use std::thread;
 
 pub struct IcmpReader {
