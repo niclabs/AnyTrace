@@ -7,7 +7,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 fn main() {
     let localip = "10.0.2.15";
-    let handler = PingHandler::new(localip, PingMethod::UDP);
+    let handler = PingHandler::new(localip, PingMethod::ICMP);
 
     let target: Ipv4Addr = "1.1.1.1".parse().unwrap();
     for _ in 0..10 {
