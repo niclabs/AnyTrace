@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Felipe <fdns@niclabs.cl>"]
 
 [dependencies]
+ratelimit = "0.4.3"
 
 [dependencies.pnet]
 git = "https://github.com/libpnet/libpnet/"

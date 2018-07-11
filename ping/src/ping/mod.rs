@@ -1,20 +1,11 @@
+mod handler;
 mod reader;
 mod writer;
 
-use self::reader::PingReader;
+pub use self::handler::PingHandler;
 pub use self::reader::Responce;
-use self::writer::PingWriter;
 
 use std::net::Ipv4Addr;
-
-use pnet::packet::ip::IpNextHeaderProtocols;
-use pnet::transport::TransportChannelType::Layer3;
-use pnet::transport::transport_channel;
-
-pub struct PingHandler {
-    pub reader: PingReader,
-    pub writer: PingWriter,
-}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum PingMethod {
@@ -22,58 +13,47 @@ pub enum PingMethod {
     UDP,
 }
 
-impl PingHandler {
-    /// Construct a new PingHandler.
-    ///
-    /// This will write and read the received packets asynchronously.
-    pub fn new(localip: &str, method: PingMethod) -> PingHandler {
+pub struct PingHandlerBuilder {
+    localip: Option<Ipv4Addr>,
+    method: Option<PingMethod>,
+    rate_limit: Option<u32>,
+}
+
+impl PingHandlerBuilder {
+    /// Create a new PingHandlerBuilder to build a PingHandler.
+    pub fn new() -> PingHandlerBuilder {
+        return PingHandlerBuilder {
+            localip: None,
+            method: None,
+            rate_limit: None,
+        };
+    }
+
+    /// Set the local IP address to listen.
+    pub fn localip(mut self, localip: &str) -> Self {
         let local: Ipv4Addr = localip.parse().unwrap();
-        let (reader, writer) = Self::generate_transport(local, method);
-        return PingHandler {
-            reader: reader,
-            writer: writer,
-        };
+        self.localip = Some(local);
+        return self;
     }
 
-    /// Construct the PingReader and PingWriter using the given local IPv4 Address.
-    fn generate_transport(local: Ipv4Addr, method: PingMethod) -> (PingReader, PingWriter) {
-        // We use Icmp as transport for Icmp and Udp, as it only filter the received packets
-        let protocol = Layer3(IpNextHeaderProtocols::Icmp);
-        let (tx, rx) = match transport_channel(4096, protocol) {
-            Ok((tx, rx)) => (tx, rx),
-            Err(e) => panic!(
-                "An error occurred when creating the transport channel:
-                            {}",
-                e
-            ),
-        };
+    /// Set the method used to send the ping packets.
+    pub fn method(mut self, method: PingMethod) -> Self {
+        self.method = Some(method);
+        return self;
+    }
 
-        return (
-            PingReader::new(rx, local),
-            PingWriter::new(tx, local, method),
+    /// Set the frequency of packets per seconds to send.
+    pub fn rate_limit(mut self, rate_limit: u32) -> Self {
+        self.rate_limit = Some(rate_limit);
+        return self;
+    }
+
+    /// Build the PingHandler
+    pub fn build(self) -> PingHandler {
+        return PingHandler::new(
+            self.localip.unwrap(),
+            self.method.unwrap(),
+            self.rate_limit.unwrap_or(100_000),
         );
-    }
-
-    /// Check the packet payload and get the timestamp
-    pub fn get_packet_timestamp_ms(payload: &[u8], check_payload: bool) -> Result<u64, &str> {
-        // The packet should be 10 bytes long
-        if payload.len() < 10 {
-            return Err("Payload is not of length 10");
-        }
-
-        // Check the payload key
-        if check_payload && payload[8..10] != *PingWriter::get_payload_key() {
-            return Err("Payload key invalid");
-        }
-
-        // Get the timestamp from the payload and convert it from Big Endian
-        return Ok(u64::from_be(Self::array_to_u64(&payload[..8])));
-    }
-
-    fn array_to_u64(data: &[u8]) -> u64 {
-        return data[7] as u64 | (data[6] as u64) << 8 | (data[5] as u64) << 16
-            | (data[4] as u64) << 24 | (data[3] as u64) << 32
-            | (data[2] as u64) << 40 | (data[1] as u64) << 48
-            | (data[0] as u64) << 56;
     }
 }

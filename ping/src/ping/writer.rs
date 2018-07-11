@@ -1,4 +1,5 @@
 extern crate pnet;
+extern crate ratelimit;
 
 use pnet::packet::icmp::{checksum, echo_request, IcmpTypes, MutableIcmpPacket};
 use pnet::packet::ip::{IpNextHeaderProtocol, IpNextHeaderProtocols};
@@ -35,19 +36,17 @@ struct PingRequest {
 impl PingWriter {
     /// Construct a new PingWriter. The writer will use the local ip as the source of the IPv4 packets.
     ///
-    /// This function will spawn a thread that process any received request asynchronously.
-    pub fn new(tx: TransportSender, local: Ipv4Addr, method: PingMethod) -> PingWriter {
-        if method == PingMethod::ICMP {
-            return PingWriter {
-                writer: Self::run(tx, local, method.clone()),
-                method: method,
-            };
-        } else {
-            return PingWriter {
-                writer: Self::run(tx, local, method.clone()),
-                method: method,
-            };
-        }
+    /// This function will spawn a thread that process any received request asynchronously, sending the packet with a frequency of `rate_limit`.
+    pub fn new(
+        tx: TransportSender,
+        local: Ipv4Addr,
+        method: PingMethod,
+        rate_limit: u32,
+    ) -> PingWriter {
+        return PingWriter {
+            writer: Self::run(tx, local, method.clone(), rate_limit),
+            method: method,
+        };
     }
 
     /// Send a generic Echo request to the ipv4 target asynchronously.
@@ -103,7 +102,12 @@ impl PingWriter {
     }
 
     /// Create a new thread and a channel to receive requests asynchronously.
-    fn run(tx: TransportSender, local: Ipv4Addr, method: PingMethod) -> mpsc::Sender<PingRequest> {
+    fn run(
+        tx: TransportSender,
+        local: Ipv4Addr,
+        method: PingMethod,
+        rate_limit: u32,
+    ) -> mpsc::Sender<PingRequest> {
         let tx = Arc::new(Mutex::new(tx));
         let (sender, receiver) = mpsc::channel::<PingRequest>();
         let process = match method {
@@ -112,9 +116,16 @@ impl PingWriter {
         };
 
         thread::spawn(move || {
+            let mut ratelimit = ratelimit::Builder::new()
+                .capacity(rate_limit)
+                .frequency(rate_limit)
+                .quantum(1)
+                .build();
+
             let mut sender = tx.lock().unwrap();
             while let Ok(request) = receiver.recv() {
                 process(&mut sender, local, &request);
+                ratelimit.wait();
             }
         });
 

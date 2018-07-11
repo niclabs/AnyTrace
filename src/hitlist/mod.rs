@@ -1,12 +1,15 @@
-extern crate pnet;
 extern crate ping;
+extern crate pnet;
 
-use self::ping::{PingHandler, PingMethod};
+use self::ping::{PingHandler, PingHandlerBuilder, PingMethod};
 use std::net::Ipv4Addr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub fn run(localip: &str) {
-    let handler = PingHandler::new(localip, PingMethod::ICMP);
+    let handler = PingHandlerBuilder::new()
+        .localip(localip)
+        .method(PingMethod::ICMP)
+        .build();
 
     let target: Ipv4Addr = "1.1.1.1".parse().unwrap();
     for _ in 0..10 {
