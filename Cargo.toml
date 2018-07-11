@@ -1,5 +1,5 @@
 [package]
-name = "trace"
+name = "anytrace"
 version = "0.1.0"
 authors = ["Felipe <fdns@niclabs.cl>"]
 
