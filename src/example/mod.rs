@@ -11,7 +11,7 @@ pub fn run(localip: &str) {
         .method(PingMethod::ICMP)
         .build();
 
-    let target: Ipv4Addr = "1.1.1.1".parse().unwrap();
+    let target: Ipv4Addr = "1.1.1.25".parse().unwrap();
     for _ in 0..10 {
         handler.writer.send(target);
     }
