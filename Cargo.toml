@@ -5,7 +5,15 @@ authors = ["Felipe <fdns@niclabs.cl>"]
 
 [dependencies]
 ping = { path = "./ping" }
+ipaddress = "0.1.1"
+num = "0.1.32"
+num-traits = "0.1.32"
+num-integer = "0.1.32"
+regex = "0.1.71"
 
 [dependencies.pnet]
 git = "https://github.com/libpnet/libpnet/"
 rev = "743e59994b5e3b9d666cc7f7500e37ee7bbde6f7"
+
+[dependendies.ipadress]
+repository = "https://github.com/mabels/ipaddress"
