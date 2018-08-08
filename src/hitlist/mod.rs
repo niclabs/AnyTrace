@@ -11,10 +11,11 @@ use self::ping::{PingHandler, PingHandlerBuilder, PingMethod};
 use std::net::Ipv4Addr;
 use std::ops::Add;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::thread;
 
 
 
-pub fn run(network: &str) {
+pub fn run(network: &str) -> IPAddress {
     let network = "1.1.1.54/24";
     let handler = PingHandlerBuilder::new()
         .localip("172.30.65.57")
@@ -30,32 +31,65 @@ pub fn run(network: &str) {
     //println!("result {} {:?}", last, prefix);
 
     let mut i = ip_network.network().host_address;
-    while i <= ip_network.broadcast().host_address {
-        if let Ok(result) = find_alive_ip((&ip_network.from(&i, &ip_network.prefix)), &handler) {
-            break;
-        };
-        i = i.add(BigUint::one());
-    }
 
-    //let ip =ip_network.each( |i| {let _ = find_alive_ip(i, &handler);});
+
+    // canal entre thread lectura escritura
+    // el proceso sender envía mensajes a receiver
+    let (sender, receiver) = mpsc::channel::<IpAddress>();
+    let sender = Arc::new(Mutex::new(sender));
+
+    //crear thread para lectura
+    //proceso sender
+    let read = thread::spawn(move || {
+        let mut sender = sender.lock().unwrap();
+        read_alive_ip(handler, &sender);
+    });
+
+    // se crea thread para escritura
+    while i <= ip_network.broadcast().host_address 
+        {
+            write_alive_ip((&ip_network.from(&i, &ip_network.prefix)), &handler);
+            i = i.add(BigUint::one());
+            let ip_received = receiver.recv().unwrap();
+            //if received_ip in network break return received_ip  ?
+            if ip_network.includes(ip_received)
+            { 
+                // todo enterrar el proceso hijo
+                return ip_received;
+            }
+        }    
+
+    
 }
-fn find_alive_ip(ip: &IPAddress, handler: &PingHandler) -> Result<Ipv4Addr, bool> {
+
+//envía un ping de cierta dirección ip a la nube
+fn write_alive_ip(ip: &IPAddress, handler: &PingHandler) {
     let st = &ip.to_s();
     let target: Ipv4Addr = st.parse().unwrap();
     handler.writer.send(target); //envia ping a la nube
+  
+}
 
-    // packet respuesta
+// lee el paquete de respueste y analiza el traceroute,
+// si la respuesta viene de la ip correspondiente notifica 
+// que la dirección esta viva 
+fn read_alive_ip(handler: &PingHandler, sender: &mpsc::Sender<IcmpResponce>) {
+     // packet respuesta
     while let Ok(packet) = handler
         .reader
         .reader()
-        .recv_timeout(Duration::from_millis(2000))
+        .recv()
     {
         match packet.icmp {
             // respuesta
-            ping::Responce::Echo(packet) => {
-                if let Ok(ts) = PingHandler::get_packet_timestamp_ms(&packet.payload, true) {
-                    println!("Parsed correctly, delta(ms) {}", target);
-                    return Ok(target);
+            ping::Responce::Echo(icmp) => {
+                if let Ok(ts) = PingHandler::get_packet_timestamp_ms(&icmp.payload, true) {
+
+                    // todo pasar de IPv4Addr a IPAdress
+                    let source = packet.source;
+                    // mandar el source hacia afuera
+                    
+                    sender.send(source).unwrap();
                 }
             }
             ping::Responce::Timeout(_packet) => {
@@ -67,8 +101,7 @@ fn find_alive_ip(ip: &IPAddress, handler: &PingHandler) -> Result<Ipv4Addr, bool
         }
     }
     return Err(false);
-  
-}
+};
 
 /// Get the current time in milliseconds
 fn time_from_epoch_ms() -> u64 {
