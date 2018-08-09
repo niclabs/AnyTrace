@@ -1,29 +1,27 @@
-extern crate ping;
-extern crate pnet;
 extern crate ipaddress;
 extern crate num;
 extern crate num_traits;
+extern crate ping;
+extern crate pnet;
 
-
-use self::pnet::packet::Packet;
-use self::pnet::packet::icmp::destination_unreachable::{DestinationUnreachable};
-use self::pnet::packet::icmp::echo_reply::{EchoReply};
-use self::pnet::packet::icmp::time_exceeded::{TimeExceeded};
 use self::ipaddress::IPAddress;
 use self::num::bigint::BigUint;
 use self::num_traits::identities::One;
+use self::ping::PingReader;
+use self::ping::PingWriter;
 use self::ping::{PingHandler, PingHandlerBuilder, PingMethod};
+use self::pnet::packet::icmp::destination_unreachable::DestinationUnreachable;
+use self::pnet::packet::icmp::echo_reply::EchoReply;
+use self::pnet::packet::icmp::time_exceeded::TimeExceeded;
+use self::pnet::packet::Packet;
 use std::net::Ipv4Addr;
 use std::ops::Add;
-use std::time::{SystemTime, UNIX_EPOCH, Duration};
-use self::ping::PingWriter;
-use self::ping::PingReader;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use std::thread;
+use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::sync::mpsc;
-
+use std::thread;
 
 pub enum Responce {
     Echo(EchoReply),
@@ -37,7 +35,7 @@ pub struct IcmpResponce {
     pub icmp: Responce,
 }
 
-pub fn run(network: &str) -> Result<IPAddress, bool>{
+pub fn run(network: &str) -> Result<IPAddress, bool> {
     let network = "10.12.0.54/24";
     let handler = PingHandlerBuilder::new()
         .localip("172.30.65.57")
@@ -54,13 +52,12 @@ pub fn run(network: &str) -> Result<IPAddress, bool>{
 
     let mut i = ip_network.network().host_address;
 
-
     // canal entre thread lectura escritura
     // el proceso sender envía mensajes a receiver
     let (sender, receiver) = mpsc::channel::<IPAddress>();
     let sender = Arc::new(Mutex::new(sender));
-    let r_handler= handler.reader;
-    let wr_handler= handler.writer;
+    let r_handler = handler.reader;
+    let wr_handler = handler.writer;
 
     //crear thread para lectura
     //proceso sender
@@ -70,22 +67,18 @@ pub fn run(network: &str) -> Result<IPAddress, bool>{
     });
 
     // se crea thread para escritura
-    while i <= ip_network.broadcast().host_address 
-        {
-            write_alive_ip((&ip_network.from(&i, &ip_network.prefix)), &wr_handler);
-            i = i.add(BigUint::one());
-            if let Ok(ip_received) = receiver.recv_timeout(Duration::from_millis(2000)){
-                //if received_ip in network
-                if ip_network.includes(&ip_received)
-                { 
+    while i <= ip_network.broadcast().host_address {
+        write_alive_ip((&ip_network.from(&i, &ip_network.prefix)), &wr_handler);
+        i = i.add(BigUint::one());
+        if let Ok(ip_received) = receiver.recv_timeout(Duration::from_millis(2000)) {
+            //if received_ip in network
+            if ip_network.includes(&ip_received) {
                 println!("{:?}", ip_received.to_s());
                 return Ok(ip_received);
-                }
             }
-        } 
-    return Err(false);   
-
-    
+        }
+    }
+    return Err(false);
 }
 
 //envía un ping de cierta dirección ip a la nube
@@ -93,29 +86,23 @@ fn write_alive_ip(ip: &IPAddress, handler: &PingWriter) {
     let st = &ip.to_s();
     let target: Ipv4Addr = st.parse().unwrap();
     handler.send(target); //envia ping a la nube
-  
 }
 
 // lee el paquete de respueste y analiza el traceroute,
-// si la respuesta viene de la ip correspondiente notifica 
-// que la dirección esta viva 
+// si la respuesta viene de la ip correspondiente notifica
+// que la dirección esta viva
 fn read_alive_ip(handler: &PingReader, sender: &mpsc::Sender<IPAddress>) {
-     // packet respuesta
-    while let Ok(packet) = handler
-        .reader()
-        .recv()
-    {
+    // packet respuesta
+    while let Ok(packet) = handler.reader().recv() {
         match packet.icmp {
             // respuesta
             ping::Responce::Echo(icmp) => {
                 if let Ok(ts) = PingHandler::get_packet_timestamp_ms(&icmp.payload, true) {
-
                     // todo pasar de IPv4Addr a IPAdress
                     let ipv4source = packet.source;
                     let source: IPAddress = IPAddress::parse(format!("{:?}", ipv4source)).unwrap();
                     // mandar el source hacia afuera
-                    if let Err(_) = sender.send(source) 
-                    {
+                    if let Err(_) = sender.send(source) {
                         // entierra el proceso hijo
                         return;
                     }
@@ -141,4 +128,3 @@ fn time_from_epoch_ms() -> u64 {
         since_the_epoch.as_secs() * 1000 + since_the_epoch.subsec_nanos() as u64 / 1_000_000;
     return in_ms;
 }
-
