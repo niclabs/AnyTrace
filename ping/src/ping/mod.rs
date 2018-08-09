@@ -1,6 +1,6 @@
 mod handler;
-mod reader;
-mod writer;
+pub mod reader;
+pub mod writer;
 
 pub use self::handler::PingHandler;
 pub use self::reader::Responce;
