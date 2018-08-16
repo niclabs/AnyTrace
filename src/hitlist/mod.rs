@@ -22,6 +22,9 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
+use std::collections::VecDeque;
+use std::collections::HashMap;
+use std::ops::Not;
 
 pub enum Responce {
     Echo(EchoReply),
@@ -34,9 +37,17 @@ pub struct IcmpResponce {
     pub ttl: u8,
     pub icmp: Responce,
 }
+pub fn run(network: &str){
+    let mut networks = VecDeque::new();
+    //let mut hnetworks= HashMap::new();
+    //run2(network, &mut networks);
+    let mut vec = vec!["1.1.1.0/24", "190.124.27.0/24", "1.1.1.0/24"]; 
+    run3(&mut vec, &mut networks);
+}
 
-pub fn run(network: &str) -> Result<IPAddress, bool> {
-    let network = "10.12.0.54/24";
+pub fn run2(network: &str, networks: &mut VecDeque<IPAddress>) -> Result<IPAddress, bool> {
+
+    let network = "1.1.1.0/24";
     let handler = PingHandlerBuilder::new()
         .localip("172.30.65.57")
         .method(PingMethod::ICMP)
@@ -44,12 +55,9 @@ pub fn run(network: &str) -> Result<IPAddress, bool> {
 
     //converts string into ip network
     let ip_network = IPAddress::parse(network).unwrap();
+    let ip_network_aux = IPAddress::parse(network).unwrap();
+    networks.push_front(ip_network_aux);
     let st = ip_network.to_s();
-    let prefix = ip_network.prefix();
-    //last ip adress within the mask network
-    let last = ip_network.last().to_s();
-    //println!("result {} {:?}", last, prefix);
-
     let mut i = ip_network.network().host_address;
 
     // canal entre thread lectura escritura
@@ -70,16 +78,81 @@ pub fn run(network: &str) -> Result<IPAddress, bool> {
     while i <= ip_network.broadcast().host_address {
         write_alive_ip((&ip_network.from(&i, &ip_network.prefix)), &wr_handler);
         i = i.add(BigUint::one());
-        if let Ok(ip_received) = receiver.recv_timeout(Duration::from_millis(2000)) {
+        // while
+        if let Ok(ip_received) = receiver.recv_timeout(Duration::from_millis(200)) {
             //if received_ip in network
-            if ip_network.includes(&ip_received) {
-                println!("{:?}", ip_received.to_s());
-                return Ok(ip_received);
+            let mut i=0;
+            while i<= networks.len(){
+                let ip_network_aux = networks.pop_back().unwrap();
+                if ip_network_aux.includes(&ip_received)
+                    {
+                    println!("{:?}", ip_received.to_s());
+                    return Ok(ip_received);
+                    }
+                networks.push_front(ip_network_aux);
+                i= i + 1;
             }
         }
     }
     return Err(false);
 }
+
+pub fn run3(Vnetwork: &mut Vec<&str>, networks: &mut VecDeque<IPAddress>) -> Result<IPAddress, bool> {
+
+    let handler = PingHandlerBuilder::new()
+        .localip("172.30.65.57")
+        .method(PingMethod::ICMP)
+        .build();
+
+    // canal entre thread lectura escritura
+    // el proceso sender envía mensajes a receiver
+    let (sender, receiver) = mpsc::channel::<IPAddress>();
+    let sender = Arc::new(Mutex::new(sender));
+    let r_handler = handler.reader;
+    let wr_handler = handler.writer;
+
+    //crear thread para lectura
+    //proceso sender
+    let read = thread::spawn(move || {
+        let mut sender = sender.lock().unwrap();
+        read_alive_ip(&r_handler, &sender);
+    });
+
+
+    while Vnetwork.len()>0
+    {
+        let network= Vnetwork.pop().unwrap();
+        let ip_network = IPAddress::parse(network).unwrap();
+        let ip_network_aux = IPAddress::parse(network).unwrap();
+        networks.push_front(ip_network_aux);
+        let mut i = ip_network.network().host_address;
+
+    // se crea thread para escritura
+    while i <= ip_network.broadcast().host_address {
+        write_alive_ip((&ip_network.from(&i, &ip_network.prefix)), &wr_handler);
+        i = i.add(BigUint::one());
+        // while
+        if let Ok(ip_received) = receiver.recv_timeout(Duration::from_millis(200)) {
+            //if received_ip in network
+            let mut i=0; 
+            while i< networks.len(){
+                let ip_network_aux = networks.pop_back().unwrap();
+                if ip_network_aux.includes(&ip_received)
+                    {
+                    println!("{:?}", ip_received.to_s());
+                    //return Ok(ip_received);
+                    break;
+                    }
+                networks.push_front(ip_network_aux);
+                i= i + 1;
+            }
+        }
+    }
+    }
+    return Err(false);
+    
+}
+
 
 //envía un ping de cierta dirección ip a la nube
 fn write_alive_ip(ip: &IPAddress, handler: &PingWriter) {
