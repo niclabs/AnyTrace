@@ -38,6 +38,21 @@ pub struct IcmpResponce {
     pub icmp: Responce,
 }
 
+/* network_state: saves de current host adress iterator
+of a network,
+and its state -> alive/not found yet
+ */
+pub struct network_state{
+    current_ip: BigUint,
+    state: bool
+}
+
+pub fn str_to_ip(network: &str)->IPAddress
+{
+    let ip_network = IPAddress::parse(network).unwrap();
+    return ip_network;
+}
+
 pub fn run(network: &str) {
     let mut vec = vec![
         "1.1.1.0/24",
@@ -50,14 +65,13 @@ pub fn run(network: &str) {
     let mut network_hash = HashMap::new();
     while vec.len() > 0 {
         let network = vec.pop().unwrap();
-        //let ip_network: Ipv4Addr = network.parse().unwrap();
-        //let ip_network =IPAddress::parse(network).unwrap();
-        network_hash.insert(network.to_string(), false);
+        let host_address= str_to_ip(network).network().host_address;
+        network_hash.insert(network.to_string(), network_state{current_ip: host_address , state: false});
     }
     channel_runner_v2(&mut network_hash);
 }
 
-pub fn channel_runner_v2(networks: &mut HashMap<String, bool>) -> Result<IPAddress, bool> {
+pub fn channel_runner_v2(networks: &mut HashMap<String, network_state>) -> Result<IPAddress, bool> {
     let handler = PingHandlerBuilder::new()
         .localip("172.30.65.57")
         .method(PingMethod::ICMP)
@@ -84,13 +98,13 @@ pub fn channel_runner_v2(networks: &mut HashMap<String, bool>) -> Result<IPAddre
             let aux_key = key.clone();
             let ip_network = IPAddress::parse(aux_key).unwrap();
             //let mut ip_network = IPAddress::parse(format!("{:?}", key)).unwrap();
-            let mut i = ip_network.network().host_address;
+            //let mut i = ip_network.network().host_address;
             // se crea thread para escritura
-            while i <= ip_network.broadcast().host_address && *value == false {
-                write_alive_ip((&ip_network.from(&i, &ip_network.prefix)), &wr_handler);
-                i = i.add(BigUint::one());
+            let i = value.current_ip.clone();
+            write_alive_ip((&ip_network.from(&value.current_ip, &ip_network.prefix)), &wr_handler);
+            value.current_ip =i.add(BigUint::one());
             }
-        }
+        
 
         //if an ip was received within the network
         // rewrite the map
@@ -101,7 +115,7 @@ pub fn channel_runner_v2(networks: &mut HashMap<String, bool>) -> Result<IPAddre
                 let mut network = IPAddress::parse(aux_key).unwrap();
                 //let mut network = IPAddress::parse(format!("{:?}", key)).unwrap();
                 if network.includes(&ip_received) {
-                    *value = true;
+                    value.state = true;
                     println!("{:?}", ip_received.to_s());
                     //return Ok(ip_received);
                     break;
