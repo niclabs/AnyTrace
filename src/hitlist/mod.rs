@@ -18,13 +18,13 @@ use std::net::Ipv4Addr;
 use std::ops::Add;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use std::collections::HashMap;
+use std::collections::VecDeque;
+use std::ops::Not;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
-use std::collections::VecDeque;
-use std::collections::HashMap;
-use std::ops::Not;
 
 pub enum Responce {
     Echo(EchoReply),
@@ -37,28 +37,31 @@ pub struct IcmpResponce {
     pub ttl: u8,
     pub icmp: Responce,
 }
-pub fn run(network: &str){
-    let mut networks = VecDeque::new();
-    //let mut hnetworks= HashMap::new();
-    //run2(network, &mut networks);
-    let mut vec = vec!["1.1.1.0/24", "190.124.27.0/24", "1.1.1.0/24"]; 
-    run3(&mut vec, &mut networks);
+
+pub fn run(network: &str) {
+    let mut vec = vec![
+        "1.1.1.0/24",
+        "190.124.27.0/24",
+        "1.1.1.0/24",
+        "5.198.248.0/24",
+        "223.233.20.0/20",
+        "223.255.235.0/24",
+    ];
+    let mut network_hash = HashMap::new();
+    while vec.len() > 0 {
+        let network = vec.pop().unwrap();
+        //let ip_network: Ipv4Addr = network.parse().unwrap();
+        //let ip_network =IPAddress::parse(network).unwrap();
+        network_hash.insert(network.to_string(), false);
+    }
+    channel_runner_v2(&mut network_hash);
 }
 
-pub fn run2(network: &str, networks: &mut VecDeque<IPAddress>) -> Result<IPAddress, bool> {
-
-    let network = "1.1.1.0/24";
+pub fn channel_runner_v2(networks: &mut HashMap<String, bool>) -> Result<IPAddress, bool> {
     let handler = PingHandlerBuilder::new()
         .localip("172.30.65.57")
         .method(PingMethod::ICMP)
         .build();
-
-    //converts string into ip network
-    let ip_network = IPAddress::parse(network).unwrap();
-    let ip_network_aux = IPAddress::parse(network).unwrap();
-    networks.push_front(ip_network_aux);
-    let st = ip_network.to_s();
-    let mut i = ip_network.network().host_address;
 
     // canal entre thread lectura escritura
     // el proceso sender envía mensajes a receiver
@@ -74,109 +77,68 @@ pub fn run2(network: &str, networks: &mut VecDeque<IPAddress>) -> Result<IPAddre
         read_alive_ip(&r_handler, &sender);
     });
 
-    // se crea thread para escritura
-    while i <= ip_network.broadcast().host_address {
-        write_alive_ip((&ip_network.from(&i, &ip_network.prefix)), &wr_handler);
-        i = i.add(BigUint::one());
-        // while
-        if let Ok(ip_received) = receiver.recv_timeout(Duration::from_millis(200)) {
-            //if received_ip in network
-            let mut i=0;
-            while i<= networks.len(){
-                let ip_network_aux = networks.pop_back().unwrap();
-                if ip_network_aux.includes(&ip_received)
-                    {
-                    println!("{:?}", ip_received.to_s());
-                    return Ok(ip_received);
-                    }
-                networks.push_front(ip_network_aux);
-                i= i + 1;
+    // writer process
+
+    loop {
+        for (key, value) in networks.into_iter() {
+            let aux_key = key.clone();
+            let ip_network = IPAddress::parse(aux_key).unwrap();
+            //let mut ip_network = IPAddress::parse(format!("{:?}", key)).unwrap();
+            let mut i = ip_network.network().host_address;
+            // se crea thread para escritura
+            while i <= ip_network.broadcast().host_address && *value == false {
+                write_alive_ip((&ip_network.from(&i, &ip_network.prefix)), &wr_handler);
+                i = i.add(BigUint::one());
             }
         }
-    }
-    return Err(false);
-}
 
-pub fn run3(Vnetwork: &mut Vec<&str>, networks: &mut VecDeque<IPAddress>) -> Result<IPAddress, bool> {
+        //if an ip was received within the network
+        // rewrite the map
 
-    let handler = PingHandlerBuilder::new()
-        .localip("172.30.65.57")
-        .method(PingMethod::ICMP)
-        .build();
-
-    // canal entre thread lectura escritura
-    // el proceso sender envía mensajes a receiver
-    let (sender, receiver) = mpsc::channel::<IPAddress>();
-    let sender = Arc::new(Mutex::new(sender));
-    let r_handler = handler.reader;
-    let wr_handler = handler.writer;
-
-    //crear thread para lectura
-    //proceso sender
-    let read = thread::spawn(move || {
-        let mut sender = sender.lock().unwrap();
-        read_alive_ip(&r_handler, &sender);
-    });
-
-
-    while Vnetwork.len()>0
-    {
-        let network= Vnetwork.pop().unwrap();
-        let ip_network = IPAddress::parse(network).unwrap();
-        let ip_network_aux = IPAddress::parse(network).unwrap();
-        networks.push_front(ip_network_aux);
-        let mut i = ip_network.network().host_address;
-
-    // se crea thread para escritura
-    while i <= ip_network.broadcast().host_address {
-        write_alive_ip((&ip_network.from(&i, &ip_network.prefix)), &wr_handler);
-        i = i.add(BigUint::one());
-        // while
-        if let Ok(ip_received) = receiver.recv_timeout(Duration::from_millis(200)) {
-            //if received_ip in network
-            let mut i=0; 
-            while i< networks.len(){
-                let ip_network_aux = networks.pop_back().unwrap();
-                if ip_network_aux.includes(&ip_received)
-                    {
+        while let Ok(ip_received) = receiver.recv_timeout(Duration::from_millis(200)) {
+            for (key, value) in networks.into_iter() {
+                let aux_key = key.clone();
+                let mut network = IPAddress::parse(aux_key).unwrap();
+                //let mut network = IPAddress::parse(format!("{:?}", key)).unwrap();
+                if network.includes(&ip_received) {
+                    *value = true;
                     println!("{:?}", ip_received.to_s());
                     //return Ok(ip_received);
                     break;
-                    }
-                networks.push_front(ip_network_aux);
-                i= i + 1;
+                }
             }
         }
-    }
+        // if all true break
     }
     return Err(false);
-    
 }
 
+/* write_aliv_ip : &IPAdress x &PingHAndles -> Void
+sends a ping to ip adress "ip" using handler param
+*/
 
-//envía un ping de cierta dirección ip a la nube
 fn write_alive_ip(ip: &IPAddress, handler: &PingWriter) {
     let st = &ip.to_s();
     let target: Ipv4Addr = st.parse().unwrap();
-    handler.send(target); //envia ping a la nube
+    handler.send(target); //pinging
 }
 
-// lee el paquete de respueste y analiza el traceroute,
-// si la respuesta viene de la ip correspondiente notifica
-// que la dirección esta viva
+/* read_alive_ip : &Pinghandler x & Sender<IPAdress> ->Void
+reads the incoming response packages and analizes the traceroute,
+sending the source ip from the last alive ip found, back to the writer process
+*/
 fn read_alive_ip(handler: &PingReader, sender: &mpsc::Sender<IPAddress>) {
-    // packet respuesta
+    // response packet
     while let Ok(packet) = handler.reader().recv() {
         match packet.icmp {
-            // respuesta
+            // response
             ping::Responce::Echo(icmp) => {
                 if let Ok(ts) = PingHandler::get_packet_timestamp_ms(&icmp.payload, true) {
-                    // todo pasar de IPv4Addr a IPAdress
                     let ipv4source = packet.source;
                     let source: IPAddress = IPAddress::parse(format!("{:?}", ipv4source)).unwrap();
-                    // mandar el source hacia afuera
+                    //sends source back to writer process
                     if let Err(_) = sender.send(source) {
-                        // entierra el proceso hijo
+                        // burries child process
                         return;
                     }
                 }
@@ -190,8 +152,8 @@ fn read_alive_ip(handler: &PingReader, sender: &mpsc::Sender<IPAddress>) {
         }
     }
 }
-
-/// Get the current time in milliseconds
+/* time_from_epoch_ms :Void-> Void
+ Get the current time in milliseconds*/
 fn time_from_epoch_ms() -> u64 {
     let start = SystemTime::now();
     let since_the_epoch = start
