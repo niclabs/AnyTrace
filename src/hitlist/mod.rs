@@ -95,6 +95,7 @@ pub fn channel_runner_v2(networks: &mut HashMap<String, network_state>) -> Resul
 
     loop {
         for (key, value) in networks.into_iter() {
+            if value.state{continue;}
             let aux_key = key.clone();
             let ip_network = IPAddress::parse(aux_key).unwrap();
             //let mut ip_network = IPAddress::parse(format!("{:?}", key)).unwrap();
@@ -122,6 +123,11 @@ pub fn channel_runner_v2(networks: &mut HashMap<String, network_state>) -> Resul
                 }
             }
         }
+        let mut mybreak= true;
+        for (key, value) in networks.into_iter(){
+            if !value.state {mybreak = false;}
+        }
+        if mybreak {break;}
         // if all true break
     }
     return Err(false);
