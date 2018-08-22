@@ -5,6 +5,7 @@ authors = ["Felipe <fdns@niclabs.cl>"]
 
 [dependencies]
 ping = { path = "./ping" }
+getopts = "0.2"
 
 [dependencies.pnet]
 git = "https://github.com/libpnet/libpnet/"
