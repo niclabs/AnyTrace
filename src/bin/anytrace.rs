@@ -1,9 +1,9 @@
 extern crate anytrace;
 extern crate getopts;
 
-use anytrace::anytrace::run;
-use self::getopts::{Options, Matches};
+use self::getopts::{Matches, Options};
 use self::std::env;
+use anytrace::anytrace::run;
 
 fn print_usage(program: &str, opts: Options) {
     let brief = format!("Usage: {} FILE [options]", program);
@@ -17,8 +17,8 @@ fn get_options() -> Result<Matches, ()> {
 
     let args: Vec<String> = env::args().collect();
     let matches = match opts.parse(&args[1..]) {
-        Ok(m) => { m }
-        Err(f) => { panic!(f.to_string()) }
+        Ok(m) => m,
+        Err(f) => panic!(f.to_string()),
     };
     if matches.opt_present("h") || !matches.opt_present("ip") {
         let program = args[0].clone();

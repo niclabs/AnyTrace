@@ -3,7 +3,7 @@ mod reader;
 mod writer;
 
 pub use self::handler::PingHandler;
-pub use self::reader::Responce;
+pub use self::reader::{IcmpResponce, Responce};
 
 use std::net::Ipv4Addr;
 
