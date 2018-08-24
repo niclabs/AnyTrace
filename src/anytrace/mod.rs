@@ -1,15 +1,15 @@
 extern crate ping;
 extern crate pnet;
 
-use self::ping::{PingHandler, PingHandlerBuilder, PingMethod, IcmpResponce};
+use self::ping::{IcmpResponce, PingHandler, PingHandlerBuilder, PingMethod};
+use self::pnet::packet::FromPacket;
+use self::pnet::packet::Packet;
+use self::pnet::packet::icmp::echo_request::{EchoRequest, EchoRequestPacket};
+use self::pnet::packet::ipv4::Ipv4Packet;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::net::Ipv4Addr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use self::pnet::packet::FromPacket;
-use self::pnet::packet::icmp::echo_request::{EchoRequestPacket, EchoRequest};
-use self::pnet::packet::ipv4::Ipv4Packet;
-use self::pnet::packet::Packet;
 
 struct TraceConfiguration {
     source: Ipv4Addr,
@@ -36,6 +36,22 @@ impl TraceConfiguration {
 }
 
 pub fn run(localip: &str) {
+    /// Start listening to ICMP packets, and generating a traceroute as new networks
+    /// start coming. Packets can be verified by their identifier, sequence_address and origin
+    /// The process is as follow
+    ///     Receive [A] EchoResponce
+    ///         Check if address is not on HashMap:
+    ///             Send EchoRequests to [A] with ttl of 1..n (DONT WRITE THE IP, as its not verified if its spoofing)
+    ///             Add to the HashMap
+    ///         else
+    ///             Check the signature of the packet, to verify that is valid and write
+    ///     Receive [B] timeout
+    ///         Check for original [A] address in HashMap
+    ///             if id/seq are valid:
+    ///                 Write the result, with the ttl (from the source packet) as the distance
+    ///                     and the time diff.
+    ///         If not on HashMap, goto [A] (This mean the packet is not verified, or came from
+    ///             an invalid ip while sending the data)
     let handler = PingHandlerBuilder::new()
         .localip(localip)
         .method(PingMethod::ICMP)
@@ -57,7 +73,12 @@ pub fn run(localip: &str) {
                     let ip = u32::from(packet.source) & 0xFFFFFF00;
                     match mapping.entry(ip) {
                         Entry::Occupied(trace) => {
-                            println!("Network {}/24 already seen ({}) {}", Ipv4Addr::from(ip), packet.source, get_max_ttl(&packet));
+                            println!(
+                                "Network {}/24 already seen ({}) {}",
+                                Ipv4Addr::from(ip),
+                                packet.source,
+                                get_max_ttl(&packet)
+                            );
                         }
                         Entry::Vacant(v) => {
                             println!("New Network {}/24", Ipv4Addr::from(ip));
@@ -67,9 +88,9 @@ pub fn run(localip: &str) {
                                     packet.source,
                                     0,
                                     0,
-                                    i+1,// ttl
+                                    i + 1,    // ttl
                                     i as u16, // identifier
-                                    i as u16 // sequence
+                                    i as u16, // sequence
                                 );
                             }
                         }
@@ -84,7 +105,10 @@ pub fn run(localip: &str) {
                     print!("{:?}, {:?}: ", packet.source, packet.ttl);
                     // The payload contains the EchoRequest packet + 64 bytes of payload if its over UDP or TCP
                     if let Ok((source, timeout)) = parse_icmp(&icmp.payload) {
-                        println!("Received timeout for ({:?}, {:?}, {})", timeout.identifier, timeout.sequence_number, source);
+                        println!(
+                            "Received timeout for ({:?}, {:?}, {})",
+                            timeout.identifier, timeout.sequence_number, source
+                        );
                     }
                     //println!("{:x?}", icmp.payload);
                 }
