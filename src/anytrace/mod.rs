@@ -6,6 +6,10 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::net::Ipv4Addr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use self::pnet::packet::FromPacket;
+use self::pnet::packet::icmp::echo_request::{EchoRequestPacket, EchoRequest};
+use self::pnet::packet::ipv4::Ipv4Packet;
+use self::pnet::packet::Packet;
 
 struct TraceConfiguration {
     source: Ipv4Addr,
@@ -37,10 +41,8 @@ pub fn run(localip: &str) {
         .method(PingMethod::ICMP)
         .build();
 
-    let target: Ipv4Addr = "1.1.1.1".parse().unwrap();
-    for _ in 0..1 {
-        handler.writer.send(target);
-    }
+    handler.writer.send("1.1.1.1".parse().unwrap());
+    handler.writer.send("8.8.8.8".parse().unwrap());
     let mut mapping: HashMap<u32, TraceConfiguration> = HashMap::new();
     loop {
         if let Ok(packet) = handler
@@ -48,9 +50,9 @@ pub fn run(localip: &str) {
             .reader()
             .recv_timeout(Duration::from_millis(2000))
         {
-            print!("{:?}, {:?}: ", packet.source, packet.ttl);
             match &packet.icmp {
                 ping::Responce::Echo(icmp) => {
+                    print!("{:?}, {:?}: ", packet.source, packet.ttl);
                     // Check if this is a new IP Address, only using his /24
                     let ip = u32::from(packet.source) & 0xFFFFFF00;
                     match mapping.entry(ip) {
@@ -58,14 +60,14 @@ pub fn run(localip: &str) {
                             println!("Network {}/24 already seen ({}) {}", Ipv4Addr::from(ip), packet.source, get_max_ttl(&packet));
                         }
                         Entry::Vacant(v) => {
-                            println!("Network {}/24 new ({})", Ipv4Addr::from(ip), packet.source);
+                            println!("New Network {}/24", Ipv4Addr::from(ip));
                             v.insert(TraceConfiguration::new(packet.source));
-                            for i in 1..get_max_ttl(&packet) {
+                            for i in 0..get_max_ttl(&packet) {
                                 handler.writer.send_complete(
                                     packet.source,
                                     0,
                                     0,
-                                    i,// ttl
+                                    i+1,// ttl
                                     i as u16, // identifier
                                     i as u16 // sequence
                                 );
@@ -73,16 +75,22 @@ pub fn run(localip: &str) {
                         }
                     }
 
+                    // TODO: Store the timestamp at the receiving channel
                     if let Ok(ts) = PingHandler::get_packet_timestamp_ms(&icmp.payload, true) {
-                        //println!("Parsed correctly, delta(ms): {}", time_from_epoch_ms() - ts);
+                        println!("Echo Verified, delta(ms): {}", time_from_epoch_ms() - ts);
                     }
                 }
                 ping::Responce::Timeout(icmp) => {
-                    // The payload contains the EchoRequest packet + 64 bytes of payload
-                    println!("Received timeout for ({:?}, {:?})", icmp.icmp_type, icmp.icmp_code);
+                    print!("{:?}, {:?}: ", packet.source, packet.ttl);
+                    // The payload contains the EchoRequest packet + 64 bytes of payload if its over UDP or TCP
+                    if let Ok((source, timeout)) = parse_icmp(&icmp.payload) {
+                        println!("Received timeout for ({:?}, {:?}, {})", timeout.identifier, timeout.sequence_number, source);
+                    }
+                    //println!("{:x?}", icmp.payload);
                 }
-                ping::Responce::Unreachable(_packet) => {
-                    println!("Received unreachable");
+                ping::Responce::Unreachable(icmp) => {
+                    //parse_icmp(&icmp.payload);
+                    //println!("Received unreachable for ({:?}, {:?})", icmp.icmp_type, icmp.icmp_code);
                 }
             }
         }
@@ -97,6 +105,19 @@ fn get_max_ttl(packet: &IcmpResponce) -> u8 {
         }
     }
     unreachable!();
+}
+
+/// Get the inner icmp information from a timeout packet.
+/// Return the source address and the icmp echo request.
+fn parse_icmp(data: &Vec<u8>) -> Result<(Ipv4Addr, EchoRequest), ()> {
+    if let Some(ipv4) = Ipv4Packet::new(data) {
+        if let Some(icmp) = EchoRequestPacket::new(ipv4.payload()) {
+            let icmp = icmp.from_packet();
+            // The payload is empty for icmp packets if they are not from TCP or UDP packets
+            return Ok((Ipv4Addr::from(ipv4.get_destination()), icmp));
+        }
+    }
+    return Err(());
 }
 
 /// Get the current time in milliseconds
