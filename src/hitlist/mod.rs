@@ -44,7 +44,8 @@ and its state -> alive/not found yet
  */
 pub struct network_state{
     current_ip: BigUint,
-    state: bool
+    state: bool,
+    last: bool
 }
 
 pub fn str_to_ip(network: &str)->IPAddress
@@ -66,7 +67,7 @@ pub fn run(network: &str) {
     while vec.len() > 0 {
         let network = vec.pop().unwrap();
         let host_address= str_to_ip(network).network().host_address;
-        network_hash.insert(network.to_string(), network_state{current_ip: host_address , state: false});
+        network_hash.insert(network.to_string(), network_state{current_ip: host_address , state: false, last: false});
     }
     channel_runner_v2(&mut network_hash);
 }
@@ -94,16 +95,20 @@ pub fn channel_runner_v2(networks: &mut HashMap<String, network_state>) -> Resul
     // writer process
 
     loop {
+        //let mut dead = false;
+        //let mut dead_nw = 0;
         for (key, value) in networks.into_iter() {
             if value.state{continue;}
             let aux_key = key.clone();
             let ip_network = IPAddress::parse(aux_key).unwrap();
-            //let mut ip_network = IPAddress::parse(format!("{:?}", key)).unwrap();
-            //let mut i = ip_network.network().host_address;
             // se crea thread para escritura
             let i = value.current_ip.clone();
-            write_alive_ip((&ip_network.from(&value.current_ip, &ip_network.prefix)), &wr_handler);
+            let ip= ip_network.from(&value.current_ip, &ip_network.prefix);
+            let last= ip_network.last();
+            write_alive_ip(&ip, &wr_handler);
+            if(ip == last){value.last= true;}
             value.current_ip =i.add(BigUint::one());
+            
             }
         
 
@@ -116,6 +121,7 @@ pub fn channel_runner_v2(networks: &mut HashMap<String, network_state>) -> Resul
                 let mut network = IPAddress::parse(aux_key).unwrap();
                 //let mut network = IPAddress::parse(format!("{:?}", key)).unwrap();
                 if network.includes(&ip_received) {
+                    if value.state {break;}
                     value.state = true;
                     println!("{:?}", ip_received.to_s());
                     //return Ok(ip_received);
@@ -125,7 +131,7 @@ pub fn channel_runner_v2(networks: &mut HashMap<String, network_state>) -> Resul
         }
         let mut mybreak= true;
         for (key, value) in networks.into_iter(){
-            if !value.state {mybreak = false;}
+            if (!value.state && !value.last) {mybreak = false;}
         }
         if mybreak {break;}
         // if all true break
