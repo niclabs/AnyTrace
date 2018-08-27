@@ -1,5 +1,6 @@
 extern crate anytrace;
 extern crate getopts;
+extern crate env_logger;
 
 use self::getopts::{Matches, Options};
 use self::std::env;
@@ -29,6 +30,7 @@ fn get_options() -> Result<Matches, ()> {
 }
 
 fn main() {
+    env_logger::init();
     if let Ok(opts) = get_options() {
         run(&opts.opt_str("ip").unwrap());
     }
