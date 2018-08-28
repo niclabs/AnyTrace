@@ -1,6 +1,6 @@
 extern crate anytrace;
-extern crate getopts;
 extern crate env_logger;
+extern crate getopts;
 
 use self::getopts::{Matches, Options};
 use self::std::env;

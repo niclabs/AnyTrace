@@ -17,6 +17,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::mpsc;
 use std::thread;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct PingReader {
     reader: mpsc::Receiver<IcmpResponce>,
@@ -32,6 +33,7 @@ pub struct IcmpResponce {
     pub source: Ipv4Addr,
     pub ttl: u8,
     pub icmp: Responce,
+    pub time_ms: u64,
 }
 
 impl PingReader {
@@ -94,6 +96,7 @@ impl PingReader {
                             source: Ipv4Addr::from(header.get_source()),
                             ttl: header.get_ttl(),
                             icmp: Responce::Echo(icmp.from_packet()),
+                            time_ms: Self::time_from_epoch_ms(),
                         };
                         if let Err(_) = sender.send(responce) {
                             // Return error if the channel is closed.
@@ -107,6 +110,7 @@ impl PingReader {
                             source: Ipv4Addr::from(header.get_source()),
                             ttl: header.get_ttl(),
                             icmp: Responce::Timeout(icmp.from_packet()),
+                            time_ms: Self::time_from_epoch_ms(),
                         };
                         if let Err(_) = sender.send(responce) {
                             // Return error if the channel is closed.
@@ -120,6 +124,7 @@ impl PingReader {
                             source: Ipv4Addr::from(header.get_source()),
                             ttl: header.get_ttl(),
                             icmp: Responce::Unreachable(icmp.from_packet()),
+                            time_ms: Self::time_from_epoch_ms(),
                         };
                         if let Err(_) = sender.send(responce) {
                             // Return error if the channel is closed.
@@ -134,5 +139,16 @@ impl PingReader {
             }
         }
         return Ok(());
+    }
+
+    /// Get the current time in milliseconds
+    fn time_from_epoch_ms() -> u64 {
+        let start = SystemTime::now();
+        let since_the_epoch = start
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards");
+        let in_ms =
+            since_the_epoch.as_secs() * 1000 + since_the_epoch.subsec_nanos() as u64 / 1_000_000;
+        return in_ms;
     }
 }
