@@ -3,6 +3,9 @@ extern crate num;
 extern crate num_traits;
 extern crate ping;
 extern crate pnet;
+extern crate rustc_serialize;
+extern crate serde;
+extern crate serde_json;
 
 use self::ipaddress::IPAddress;
 use self::num::bigint::BigUint;
@@ -14,12 +17,15 @@ use self::pnet::packet::icmp::destination_unreachable::DestinationUnreachable;
 use self::pnet::packet::icmp::echo_reply::EchoReply;
 use self::pnet::packet::icmp::time_exceeded::TimeExceeded;
 use self::pnet::packet::Packet;
+use self::rustc_serialize::json::Json;
 use std::net::Ipv4Addr;
 use std::ops::Add;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use std::collections::HashMap;
 use std::collections::VecDeque;
+use std::fs::File;
+use std::io::Read;
 use std::ops::Not;
 use std::sync::mpsc;
 use std::sync::Arc;
@@ -42,19 +48,54 @@ pub struct IcmpResponce {
 of a network,
 and its state -> alive/not found yet
  */
-pub struct network_state{
+pub struct network_state {
     current_ip: BigUint,
     state: bool,
-    last: bool
+    last: bool,
 }
 
-pub fn str_to_ip(network: &str)->IPAddress
-{
+pub fn str_to_ip(network: &str) -> IPAddress {
     let ip_network = IPAddress::parse(network).unwrap();
     return ip_network;
 }
 
+// Dictionary for reading json file
+type Dictionary = HashMap<String, Vec<String>>;
+
 pub fn run(network: &str) {
+    let mut file = File::open("data/asn_prefixes.json").unwrap();
+    let mut data = String::new();
+    file.read_to_string(&mut data).unwrap();
+    let dict: Dictionary = serde_json::from_str(&data).unwrap();
+    //let vec = dict.get("8587").unwrap();
+
+    for (key, value) in dict.into_iter() {
+        let mut vec = value;
+        println!("{:?}", vec);
+        let mut network_hash = HashMap::new();
+        while vec.len() > 0 {
+            let net = vec.pop().unwrap();
+            let host_address = str_to_ip(&net).network().host_address;
+            network_hash.insert(
+                network.to_string(),
+                network_state {
+                    current_ip: host_address,
+                    state: false,
+                    last: false,
+                },
+            );
+        }
+        channel_runner_v2(&mut network_hash);
+    }
+    /* let json = Json::from_str(&data).unwrap();
+    println!("{}", json.find_path(&["8587"]).unwrap());
+    //let map= String::to_string(&format!("{:?}", json.find_path(&["8587"]).unwrap()));
+    */
+}
+
+/* runs through a vector of common and unknown networks
+ for testing*/
+pub fn test_run(network: &str) {
     let mut vec = vec![
         "1.1.1.0/24",
         "190.124.27.0/24",
@@ -65,9 +106,16 @@ pub fn run(network: &str) {
     ];
     let mut network_hash = HashMap::new();
     while vec.len() > 0 {
-        let network = vec.pop().unwrap();
-        let host_address= str_to_ip(network).network().host_address;
-        network_hash.insert(network.to_string(), network_state{current_ip: host_address , state: false, last: false});
+        let net = vec.pop().unwrap();
+        let host_address = str_to_ip(net).network().host_address;
+        network_hash.insert(
+            network.to_string(),
+            network_state {
+                current_ip: host_address,
+                state: false,
+                last: false,
+            },
+        );
     }
     channel_runner_v2(&mut network_hash);
 }
@@ -98,19 +146,21 @@ pub fn channel_runner_v2(networks: &mut HashMap<String, network_state>) -> Resul
         //let mut dead = false;
         //let mut dead_nw = 0;
         for (key, value) in networks.into_iter() {
-            if value.state{continue;}
+            if value.state {
+                continue;
+            }
             let aux_key = key.clone();
             let ip_network = IPAddress::parse(aux_key).unwrap();
             // se crea thread para escritura
             let i = value.current_ip.clone();
-            let ip= ip_network.from(&value.current_ip, &ip_network.prefix);
-            let last= ip_network.last();
+            let ip = ip_network.from(&value.current_ip, &ip_network.prefix);
+            let last = ip_network.last();
             write_alive_ip(&ip, &wr_handler);
-            if(ip == last){value.last= true;}
-            value.current_ip =i.add(BigUint::one());
-            
+            if (ip == last) {
+                value.last = true;
             }
-        
+            value.current_ip = i.add(BigUint::one());
+        }
 
         //if an ip was received within the network
         // rewrite the map
@@ -121,7 +171,9 @@ pub fn channel_runner_v2(networks: &mut HashMap<String, network_state>) -> Resul
                 let mut network = IPAddress::parse(aux_key).unwrap();
                 //let mut network = IPAddress::parse(format!("{:?}", key)).unwrap();
                 if network.includes(&ip_received) {
-                    if value.state {break;}
+                    if value.state {
+                        break;
+                    }
                     value.state = true;
                     println!("{:?}", ip_received.to_s());
                     //return Ok(ip_received);
@@ -129,11 +181,15 @@ pub fn channel_runner_v2(networks: &mut HashMap<String, network_state>) -> Resul
                 }
             }
         }
-        let mut mybreak= true;
-        for (key, value) in networks.into_iter(){
-            if (!value.state && !value.last) {mybreak = false;}
+        let mut mybreak = true;
+        for (key, value) in networks.into_iter() {
+            if (!value.state && !value.last) {
+                mybreak = false;
+            }
         }
-        if mybreak {break;}
+        if mybreak {
+            break;
+        }
         // if all true break
     }
     return Err(false);
