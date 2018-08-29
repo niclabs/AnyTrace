@@ -7,7 +7,6 @@ use self::pnet::packet::Packet;
 use self::pnet::packet::icmp::echo_request::{EchoRequest, EchoRequestPacket};
 use self::pnet::packet::ipv4::Ipv4Packet;
 use std::collections::HashMap;
-use std::collections::hash_map::Entry;
 use std::net::Ipv4Addr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -15,9 +14,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 struct TraceConfiguration {
     source: Ipv4Addr,
     max_hop: u8,
-    traces: Vec<Trace>,
     send_time: u64,
-    or_traces: Vec<Option<Trace>>
+    traces: Vec<Option<Trace>>,
 }
 
 #[derive(Debug, Clone)]
@@ -33,8 +31,8 @@ impl TraceConfiguration {
         return TraceConfiguration {
             source: source,
             max_hop: max_hops,
-            traces: Vec::new(),
-            or_traces: opts,
+
+            traces: opts,
             send_time: time_from_epoch_ms(),
         };
     }
@@ -62,8 +60,7 @@ impl TraceConfiguration {
 /// TODO: Change the map to a csv file, and store continuosly. This allow to only store
 ///       the ip mask in a trie, making it a lot faster
 ///   => Trace (target, source, request_source, ttl_measured, dt) // request_source is the original target (not the timeout target)
-/// TODO: Have the writter process to store the send time, or advice when a packet was sended
-/// TODO: Add random offset/xor as a key of the packets
+/// TODO: Add random offset/xor as a key of the packets, so we can differentiate which packets are ours and which are not
 pub fn run(localip: &str) {
     let handler = PingHandlerBuilder::new()
         .localip(localip)
@@ -92,20 +89,22 @@ pub fn run(localip: &str) {
                     let ip = u32::from(packet.source) & 0xFFFFFF00;
                     if mapping.contains_key(&ip) {
                         info!(
-                                "Network {}/24 already seen ({}) {}-{}",
-                                Ipv4Addr::from(ip),
-                                packet.source,
-                                packet.ttl,
-                                get_max_ttl(&packet)
-                            );
+                            "Network {}/24 already seen ({}) {}-{}",
+                            Ipv4Addr::from(ip),
+                            packet.source,
+                            packet.ttl,
+                            get_max_ttl(&packet)
+                        );
                         if let Ok(_) = PingHandler::verify_signature(&icmp.payload) {
-                            if verify_packet(
-                                packet.source,
-                                icmp.identifier,
-                                icmp.sequence_number,
-                            ) {
-                                // TODO: use the packet time instead of the calculated for better accuracy
-                                update_trace_entry(&mut mapping, packet.source, packet.source, icmp.sequence_number as u8, packet.time_ms);
+                            if verify_packet(packet.source, icmp.identifier, icmp.sequence_number) {
+                                // TODO (Optional): use the packet time instead of the calculated for better accuracy
+                                update_trace_entry(
+                                    &mut mapping,
+                                    packet.source,
+                                    packet.source,
+                                    icmp.sequence_number as u8,
+                                    packet.time_ms,
+                                );
                             } else {
                                 error!("Error verifying packet");
                             }
@@ -117,11 +116,13 @@ pub fn run(localip: &str) {
                         // We dont store the information of this packet.
                         last_network = time_from_epoch_ms();
                         info!("New Network {}/24, ttl: {}", Ipv4Addr::from(ip), packet.ttl);
-                        mapping.insert(ip, TraceConfiguration::new(packet.source, get_max_ttl(&packet)));
+                        mapping.insert(
+                            ip,
+                            TraceConfiguration::new(packet.source, get_max_ttl(&packet)),
+                        );
                         for i in 0..get_max_ttl(&packet) {
                             let head: u16 = (ip >> 16) as u16;
                             let tail: u16 = (ip | (i + 1) as u32) as u16;
-                            // TODO: Remove key from the packets, so we know which one is from the local trace and which no
                             handler.writer.send_complete(
                                 packet.source,
                                 0,
@@ -144,8 +145,18 @@ pub fn run(localip: &str) {
                         // Verify the packet
                         if verify_packet(source, timeout.identifier, timeout.sequence_number) {
                             // the packet identification match the queried ip address, add it to the measures
-                            update_trace_entry(&mut mapping, source, packet.source, timeout.sequence_number as u8, packet.time_ms);
+                            update_trace_entry(
+                                &mut mapping,
+                                source,
+                                packet.source,
+                                timeout.sequence_number as u8,
+                                packet.time_ms,
+                            );
 
+                            let netsrc = u32::from(packet.source) & 0xFFFFFF00;
+                            if !mapping.contains_key(&netsrc) {
+                                mapping.insert(netsrc, TraceConfiguration::new(packet.source, 0));
+                            }
                             // TODO: Mark the network as measured, to prevent double work.
                             /*
                             let netsrc = u32::from(packet.source) & 0xFFFFFF00;
@@ -157,8 +168,7 @@ pub fn run(localip: &str) {
                                     }
                                     _ => {}
                                 }
-                            }*/
-                        }
+                            }*/                        }
                     }
                 }
                 ping::Responce::Unreachable(_icmp) => {
@@ -167,7 +177,13 @@ pub fn run(localip: &str) {
                 }
                 ping::Responce::LocalSendedEcho(target) => {
                     // Receive the locally written packets, and store the timestamp.
-                    update_trace_entry(&mut mapping, *target, Ipv4Addr::new(0,0,0,0), packet.ttl, packet.time_ms);
+                    update_trace_entry(
+                        &mut mapping,
+                        *target,
+                        Ipv4Addr::new(0, 0, 0, 0),
+                        packet.ttl,
+                        packet.time_ms,
+                    );
                 }
             }
         }
@@ -176,9 +192,11 @@ pub fn run(localip: &str) {
     for (_k, v) in &mapping {
         let mut ended = false;
         for t in &v.traces {
-            if t.router == v.source {
-                ended = true;
-                break;
+            if let Some(t) = t {
+                if t.router == v.source {
+                    ended = true;
+                    break;
+                }
             }
         }
         if ended {
@@ -191,7 +209,13 @@ pub fn run(localip: &str) {
     println!("{:?}", mapping);
 }
 
-fn update_trace_entry(mapping: &mut HashMap<u32, TraceConfiguration>, original_target: Ipv4Addr, packet_source: Ipv4Addr, ttl: u8, time_ms: u64) {
+fn update_trace_entry(
+    mapping: &mut HashMap<u32, TraceConfiguration>,
+    original_target: Ipv4Addr,
+    packet_source: Ipv4Addr,
+    ttl: u8,
+    time_ms: u64,
+) {
     let source_net = u32::from(original_target) & 0xFFFFFF00;
     if let Some(tracecofig) = mapping.get_mut(&source_net) {
         // get the index as ttl-1, making sure we dont overflow
@@ -199,14 +223,19 @@ fn update_trace_entry(mapping: &mut HashMap<u32, TraceConfiguration>, original_t
 
         // This should always be set, as we do preallocation
         // Unless it is a middle node where we dont store the values.
-        if let Some(trace) = tracecofig.or_traces.get_mut(index as usize) {
+        if let Some(trace) = tracecofig.traces.get_mut(index as usize) {
             if let Some(measurement) = trace {
                 // We have already setted the value before, calculate the time difference
-                measurement.ms = u64::max(measurement.ms, time_ms) - u64::min(measurement.ms, time_ms);
+                measurement.ms =
+                    u64::max(measurement.ms, time_ms) - u64::min(measurement.ms, time_ms);
 
                 if measurement.router.is_unspecified() {
                     measurement.router = packet_source;
                 }
+                println!(
+                    "{}, {}, {}, {}",
+                    original_target, measurement.router, measurement.hops, measurement.ms
+                );
             } else {
                 *trace = Some(Trace {
                     router: packet_source,

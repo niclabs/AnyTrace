@@ -199,7 +199,7 @@ impl PingWriter {
                     source: src,
                     ttl: request.ttl,
                     icmp: Responce::LocalSendedEcho(request.target),
-                    time_ms: Self::time_from_epoch_ms(), //TODO: Move this before the send_to
+                    time_ms: Self::time_from_epoch_ms(),
                 });
             }
             Err(e) => error!("failed to send packet: {}", e),
