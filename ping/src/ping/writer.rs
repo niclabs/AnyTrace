@@ -19,6 +19,8 @@ use std::sync::Mutex;
 use std::sync::mpsc;
 use std::thread;
 
+use ::{Responce, IcmpResponce};
+
 pub struct PingWriter {
     writer: mpsc::Sender<PingRequest>,
     method: PingMethod,
@@ -42,9 +44,10 @@ impl PingWriter {
         local: Ipv4Addr,
         method: PingMethod,
         rate_limit: u32,
+        loopback: mpsc::Sender<IcmpResponce>
     ) -> PingWriter {
         return PingWriter {
-            writer: Self::run(tx, local, method.clone(), rate_limit),
+            writer: Self::run(tx, local, method.clone(), rate_limit, loopback),
             method: method,
         };
     }
@@ -102,11 +105,14 @@ impl PingWriter {
     }
 
     /// Create a new thread and a channel to receive requests asynchronously.
+    /// 
+    /// Use process_icmp or process_udp depending on the selected method.
     fn run(
         tx: TransportSender,
         local: Ipv4Addr,
         method: PingMethod,
         rate_limit: u32,
+        loopback: mpsc::Sender<IcmpResponce>,
     ) -> mpsc::Sender<PingRequest> {
         let tx = Arc::new(Mutex::new(tx));
         let (sender, receiver) = mpsc::channel::<PingRequest>();
@@ -124,7 +130,7 @@ impl PingWriter {
 
             let mut sender = tx.lock().unwrap();
             while let Ok(request) = receiver.recv() {
-                process(&mut sender, local, &request);
+                process(&mut sender, local, &request, &loopback);
                 ratelimit.wait();
             }
         });
@@ -133,7 +139,7 @@ impl PingWriter {
     }
 
     /// Send a UDP packet with the given parameters
-    fn process_udp(tx: &mut TransportSender, src: Ipv4Addr, request: &PingRequest) {
+    fn process_udp(tx: &mut TransportSender, src: Ipv4Addr, request: &PingRequest, loopback: &mpsc::Sender<IcmpResponce>) {
         // Buffer is [20 ipv4, 8 UDP, 8 + 2 Payload]
         let mut buffer = [0; 20 + 8 + 10];
         Self::format_udp(&mut buffer[20..], request);
@@ -148,7 +154,15 @@ impl PingWriter {
             Ipv4Packet::new(&buffer).unwrap(),
             IpAddr::V4(request.target),
         ) {
-            Ok(_) => {}
+            Ok(_) => {
+                // send the packet to the loopback to store the send_time
+                let _ = loopback.send(IcmpResponce {
+                    source: src,
+                    ttl: request.ttl,
+                    icmp: Responce::LocalSendedEcho(request.target),
+                    time_ms: Self::time_from_epoch_ms(),
+                });
+            }
             Err(e) => error!("failed to send packet: {}", e),
         };
     }
@@ -163,7 +177,7 @@ impl PingWriter {
     }
 
     /// Send a ICMP packet with the given parameters
-    fn process_icmp(tx: &mut TransportSender, src: Ipv4Addr, request: &PingRequest) {
+    fn process_icmp(tx: &mut TransportSender, src: Ipv4Addr, request: &PingRequest, loopback: &mpsc::Sender<IcmpResponce>) {
         // Buffer is [20 ipv4, 8 ICMP, 8 + 2 Payload]
         let mut buffer = [0; 20 + 8 + 10];
         Self::format_icmp(&mut buffer[20..], request.identifier, request.sequence);
@@ -179,7 +193,15 @@ impl PingWriter {
             Ipv4Packet::new(&buffer).unwrap(),
             IpAddr::V4(request.target),
         ) {
-            Ok(_) => {}
+            Ok(_) => {
+                // send the packet to the loopback to store the send_time
+                let _ = loopback.send(IcmpResponce {
+                    source: src,
+                    ttl: request.ttl,
+                    icmp: Responce::LocalSendedEcho(request.target),
+                    time_ms: Self::time_from_epoch_ms(), //TODO: Move this before the send_to
+                });
+            }
             Err(e) => error!("failed to send packet: {}", e),
         };
     }

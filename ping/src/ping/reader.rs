@@ -21,12 +21,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct PingReader {
     reader: mpsc::Receiver<IcmpResponce>,
+    writer: mpsc::Sender<IcmpResponce>,
 }
 
 pub enum Responce {
     Echo(EchoReply),
     Timeout(TimeExceeded),
     Unreachable(DestinationUnreachable),
+    LocalSendedEcho(Ipv4Addr),
 }
 
 pub struct IcmpResponce {
@@ -38,8 +40,10 @@ pub struct IcmpResponce {
 
 impl PingReader {
     pub fn new(tx: TransportReceiver, local: Ipv4Addr) -> PingReader {
+        let (sender, receiver) = Self::run(local, tx);
         return PingReader {
-            reader: Self::run(local, tx),
+            reader: receiver,
+            writer: sender,
         };
     }
 
@@ -47,17 +51,24 @@ impl PingReader {
         return &self.reader;
     }
 
+    /// Get a clone of a responce writer
+    /// Limited to the crate, as only the writer should write the processed packets with their timestamp
+    pub(crate) fn writer(&self) -> mpsc::Sender<IcmpResponce> {
+        return self.writer.clone();
+    }
+
     /// Create a new thread and channel to receive requests asynchronously.
-    fn run(local: Ipv4Addr, reader: TransportReceiver) -> mpsc::Receiver<IcmpResponce> {
+    fn run(local: Ipv4Addr, reader: TransportReceiver) -> (mpsc::Sender<IcmpResponce>, mpsc::Receiver<IcmpResponce>) {
         let (sender, receiver) = mpsc::channel::<IcmpResponce>();
         let reader = Arc::new(Mutex::new(reader));
+        let sender_thread = sender.clone();
         thread::spawn(move || {
             let mut reader = reader.lock().unwrap();
             let mut iter = ipv4_packet_iter(&mut reader);
             loop {
                 let packet = iter.next();
                 if let Ok((packet, _)) = packet {
-                    if let Err(_) = Self::process_ipv4(&packet, local, &sender) {
+                    if let Err(_) = Self::process_ipv4(&packet, local, &sender_thread) {
                         // Channel is closed, exit
                         return;
                     }
@@ -65,7 +76,7 @@ impl PingReader {
             }
         });
 
-        return receiver;
+        return (sender, receiver);
     }
 
     /// Parse the IPv4 packet, only continuing if the ICMP protocol was used.

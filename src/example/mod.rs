@@ -35,6 +35,7 @@ pub fn run(localip: &str) {
             ping::Responce::Unreachable(_packet) => {
                 println!("Received unreachable");
             }
+            ping::Responce::LocalSendedEcho(_) => {}
         }
     }
 }

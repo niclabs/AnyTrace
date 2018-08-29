@@ -43,9 +43,11 @@ impl PingHandler {
             ),
         };
 
+        let reader = PingReader::new(rx, local);
+        let reader_writer = reader.writer();
         return (
-            PingReader::new(rx, local),
-            PingWriter::new(tx, local, method, rate_limit),
+            reader,
+            PingWriter::new(tx, local, method, rate_limit, reader_writer),
         );
     }
 
