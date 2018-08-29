@@ -149,7 +149,7 @@ impl PingWriter {
             IpAddr::V4(request.target),
         ) {
             Ok(_) => {}
-            Err(e) => println!("failed to send packet: {}", e),
+            Err(e) => error!("failed to send packet: {}", e),
         };
     }
 
@@ -180,7 +180,7 @@ impl PingWriter {
             IpAddr::V4(request.target),
         ) {
             Ok(_) => {}
-            Err(e) => println!("failed to send packet: {}", e),
+            Err(e) => error!("failed to send packet: {}", e),
         };
     }
 

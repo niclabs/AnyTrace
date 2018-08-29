@@ -1,5 +1,7 @@
 extern crate pnet;
 extern crate ratelimit;
+#[macro_use]
+extern crate log;
 
 mod ping;
 

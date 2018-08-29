@@ -5,6 +5,7 @@ authors = ["Felipe <fdns@niclabs.cl>"]
 
 [dependencies]
 ratelimit = "0.4.3"
+log = "0.4.4"
 
 [dependencies.pnet]
 git = "https://github.com/libpnet/libpnet/"
