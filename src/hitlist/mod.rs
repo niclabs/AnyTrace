@@ -57,6 +57,7 @@ pub fn str_to_ip(network: &str) -> IPAddress {
     return ip_network;
 }
 
+
 // Dictionary for reading json file
 type Dictionary = HashMap<String, Vec<String>>;
 
@@ -84,38 +85,11 @@ pub fn run(dummy: &str) {
         }
         //channel_runner_v2(&mut network_hash);
     }
-    channel_runner_v2(&mut network_hash);
+    channel_runner(&mut network_hash);
 
 }
 
-/* runs through a vector of common and unknown networks
- for testing*/
-pub fn test_run(dummy: &str) {
-    let mut vec = vec![
-        "1.1.1.0/24",
-        "190.124.27.0/24",
-        "1.1.1.0/24",
-        "5.198.248.0/24",
-        "223.233.20.0/20",
-        "223.255.235.0/24",
-    ];
-    let mut network_hash = HashMap::new();
-    while vec.len() > 0 {
-        let net = vec.pop().unwrap();
-        let host_address = str_to_ip(net).network().host_address;
-        network_hash.insert(
-            net.to_string(),
-            network_state {
-                current_ip: host_address,
-                state: false,
-                last: false,
-            },
-        );
-    }
-    channel_runner_v2(&mut network_hash);
-}
-
-pub fn channel_runner_v2(networks: &mut HashMap<String, network_state>) {
+pub fn channel_runner(networks: &mut HashMap<String, network_state>) {
     let handler = PingHandlerBuilder::new()
         .localip("172.30.65.57")
         .method(PingMethod::ICMP)
