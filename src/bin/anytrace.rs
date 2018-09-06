@@ -13,14 +13,14 @@ fn print_usage(program: &str, opts: Options) {
 
 fn get_options() -> Result<Matches, ()> {
     let mut opts = Options::new();
-    opts.optopt("i", "ip", "IP adderss to emit the packets", "ip");
-    opts.optopt(
+    opts.reqopt("i", "ip", "IP adderss to emit the packets", "192.168.0.1");
+    opts.reqopt(
         "p",
         "pps",
         "Rate of packets per second to send, considering every packets is 64 bytes or less.",
         "1000",
     );
-    opts.optopt(
+    opts.reqopt(
         "l",
         "hitlist",
         "File containing the histlist, separated by newline",
@@ -31,15 +31,14 @@ fn get_options() -> Result<Matches, ()> {
     let args: Vec<String> = env::args().collect();
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => panic!(f.to_string()),
+        Err(f) => {
+            println!("{}", f.to_string());
+            let program = args[0].clone();
+            print_usage(&program, opts);
+            return Err(());
+        },
     };
-    if matches.opt_present("h") || !matches.opt_present("ip") || !matches.opt_present("p")
-        || !matches.opt_present("hitlist")
-    {
-        let program = args[0].clone();
-        print_usage(&program, opts);
-        return Err(());
-    }
+
     return Ok(matches);
 }
 
