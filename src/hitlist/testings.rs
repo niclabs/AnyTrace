@@ -41,16 +41,6 @@ pub struct IcmpResponce {
     pub icmp: Responce,
 }
 
-/*
-pub fn run (dummy: &str){
-    let s1 = "223.233.20.2/16";
-    let s2 = "223.233.20.1/20";
-    let ip1 = str_to_ip(&s1);
-    let ip2= str_to_ip(&s2);
-    println!("{:?}", ip1.first());
-    println!("{:?}", ip2.gt(&ip1));
-}*/
-
  /* test funcionality of ipaddess crate*/
 pub fn testings(dummy: &str){
     let network= IPAddress::parse("255.255.0.0/16").unwrap();
@@ -103,59 +93,14 @@ struct MyValue
     value: network_state,
 }
 
-struct MyTree {
-    value: MyValue,
-    l_leaf: MyTree,
-    r_leaf: MyTree,
+/*returns the network mask significant bit */
+pub fn significant_bit (dummy: &str)
+{
+    let s1 = "193.168.0.0/17";
+    let ip1= str_to_ip(&s1);
+    let host = ip1.host_address.to_u32().unwrap();
+    let mask = ip1.prefix.get_prefix();
+    //let i = u32::from(ip1);
+    if ((host>> 32-mask)&1)==1 { println!("{:#b}", (host >> (32-mask)) & 1);}
+    else {println!("0");}
 }
-
-impl MyTree {
-
-    fn origin() -> Point {
-        Point { x: 0.0, y: 0.0 }
-    }
-
-    // Another static method, taking two arguments:
-    fn new(x: f64, y: f64) -> Point {
-        Point { x: x, y: y }
-    }
-}
-
-#[derive(PartialEq)]
-struct MyNode<'a> {
-    val: &'a MyValue,
-    l: Option<Box<MyNode<'a>>>,
-    r: Option<Box<MyNode<'a>>>,
-}
-impl<'a> MyNode<'a> {
-    pub fn insert(&mut self, new_val: &'a MyValue) {
-        if self.val.key.eq(& new_val.key) {
-            return
-        }
-        let target_node = if new_val.key.first().lt( & self.val.key.first()) { &mut self.l } else { &mut self.r };
-        match target_node {
-            &mut Some(ref mut subnode) => subnode.insert(new_val),
-            &mut None => {
-                let new_node = Node { val: new_val, l: None, r: None };
-                let boxed_node = Some(Box::new(new_node));
-                *target_node = boxed_node;
-            }
-        }
-    }
-}
-/*
-fn main () {
-    let mut x = Node { val: "m", l: None, r: None };
-    x.insert("z");
-    x.insert("b");
-    x.insert("c");
-    assert!(x == Node {
-        val: "m",
-        l: Some(Box::new(Node {
-            val: "b",
-            l: None,
-            r: Some(Box::new(Node { val: "c", l: None, r: None })),
-        })),
-        r: Some(Box::new(Node { val: "z", l: None, r: None })),
-    });
-}*/

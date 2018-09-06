@@ -6,7 +6,9 @@ extern crate pnet;
 extern crate rustc_serialize;
 extern crate serde;
 extern crate serde_json;
+extern crate radix_trie;
 
+use self::radix_trie::Trie;
 use self::ipaddress::IPAddress;
 use self::num::bigint::BigUint;
 use self::num_traits::identities::One;
@@ -28,6 +30,8 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
+use hitlist::num::ToPrimitive;
+
 
 pub enum Responce {
     Echo(EchoReply),
@@ -56,6 +60,47 @@ pub fn str_to_ip(network: &str) -> IPAddress {
     let ip_network = IPAddress::parse(network).unwrap();
     return ip_network;
 }
+
+/*net_to_vector recieves a network string and returns a vector of bits 
+for the net  */
+pub fn net_to_vector(network: &str) -> Vec<u8>
+{
+    let ip= str_to_ip(network);
+    let host = ip.host_address.to_u32().unwrap();
+    let mut vec = Vec::new();
+    let mask = ip.prefix.get_prefix();
+    for i in 0..mask
+    {
+        let num = ((host >> 31- i) & 1) as u8;
+        vec.push(num);
+    }
+    return vec;
+}
+
+pub fn create_trie(dummy: &str){
+    let mut trie = Trie::new();
+    let mut vec = vec![
+        "1.1.1.0/24",
+        "1.1.1.0/25",
+        "190.124.27.0/24",
+        "1.1.1.0/24",
+        "5.198.248.0/24",
+        "223.233.20.0/20",
+        "223.255.235.0/24",
+    ];
+    while vec.len() > 0 {
+        let net = (vec.pop().unwrap());
+        let vec = net_to_vector(&net);
+        trie.insert(vec, net);
+    }
+    let m = trie.get_ancestor(&net_to_vector(&"1.1.1.0/32"));
+    println!("{:?}",m);
+    /*for i in "1001".chars() 
+    {
+        println!("{:?}", i.to_digit(10).unwrap());
+    }*/
+}
+
 
 
 // Dictionary for reading json file
