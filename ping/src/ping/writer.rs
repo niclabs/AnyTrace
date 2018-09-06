@@ -1,5 +1,5 @@
 extern crate pnet;
-extern crate ratelimit;
+extern crate ratelimit_meter;
 
 use pnet::packet::icmp::{checksum, echo_request, IcmpTypes, MutableIcmpPacket};
 use pnet::packet::ip::{IpNextHeaderProtocol, IpNextHeaderProtocols};
@@ -120,18 +120,23 @@ impl PingWriter {
             PingMethod::ICMP => Self::process_icmp,
             PingMethod::UDP => Self::process_udp,
         };
-
+        use ping::writer::ratelimit_meter::Decider;
+        use std::time::Duration;
         thread::spawn(move || {
-            let mut ratelimit = ratelimit::Builder::new()
-                .capacity(1)
-                .frequency(rate_limit)
-                .quantum(1)
-                .build();
+            let mut ratelimit = ratelimit_meter::LeakyBucket::new(rate_limit, Duration::from_secs(1)).unwrap();
 
             let mut sender = tx.lock().unwrap();
             while let Ok(request) = receiver.recv() {
-                process(&mut sender, local, &request, &loopback);
-                ratelimit.wait();
+                match ratelimit.check() {
+                    Ok(()) => { 
+                        process(&mut sender, local, &request, &loopback);
+                    }
+                    Err(_) => {
+                        // Wait for 100 millis to fill the bucket with more than one item,
+                        // preveting wakeups of one packet
+                        thread::sleep(Duration::from_millis(100));
+                    }
+                }
             }
         });
 

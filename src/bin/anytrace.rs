@@ -36,7 +36,7 @@ fn get_options() -> Result<Matches, ()> {
             let program = args[0].clone();
             print_usage(&program, opts);
             return Err(());
-        },
+        }
     };
 
     return Ok(matches);

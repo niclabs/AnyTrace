@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Felipe <fdns@niclabs.cl>"]
 
 [dependencies]
-ratelimit = "0.4.3"
+ratelimit_meter = "2.0.0"
 log = "0.4.4"
 
 [dependencies.pnet]
