@@ -7,8 +7,12 @@ use self::pnet::packet::Packet;
 use self::pnet::packet::icmp::echo_request::{EchoRequest, EchoRequestPacket};
 use self::pnet::packet::ipv4::Ipv4Packet;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::net::Ipv4Addr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 
 #[derive(Debug)]
 struct TraceConfiguration {
@@ -61,27 +65,41 @@ impl TraceConfiguration {
 ///       the ip mask in a trie, making it a lot faster
 ///   => Trace (target, source, request_source, ttl_measured, dt) // request_source is the original target (not the timeout target)
 /// TODO: Add random offset/xor as a key of the packets, so we can differentiate which packets are ours and which are not
-pub fn run(localip: &str) {
+pub fn run(hitlist: &str, localip: &str, pps: u32) {
     let handler = PingHandlerBuilder::new()
         .localip(localip)
         .method(PingMethod::ICMP)
-        .rate_limit(100)
+        .rate_limit(pps)
         .build();
 
-    handler.writer.send("1.1.1.1".parse().unwrap());
-    handler.writer.send("8.8.8.8".parse().unwrap());
     let mut mapping: HashMap<u32, TraceConfiguration> = HashMap::new();
-    let mut last_network = time_from_epoch_ms();
+    let file = File::open(hitlist).unwrap();
+    let mut lines = BufReader::new(file).lines();
     loop {
-        if let Ok(packet) = handler
+        let mut end = true;
+        for _ in 0..pps {
+            if let Some(line) = lines.next() {
+                if let Ok(ip) = line.unwrap().parse() {
+                    let ip: Ipv4Addr = ip;
+                    if !mapping.contains_key(&(u32::from(ip) & 0xFFFFFF00)) {
+                        // We don't store the information, as this packet only verifies if
+                        // the host is online, and not execute the tracerote
+                        handler.writer.send(ip);
+                        end = false;
+                    }
+                }
+            }
+        }
+        if end {
+            break;
+        }
+
+        // TODO: Change rec_timeout break, as we arent counting packets that are not ours
+        while let Ok(packet) = handler
             .reader
             .reader()
-            .recv_timeout(Duration::from_millis(20_000))
+            .recv_timeout(Duration::from_millis(1_000))
         {
-            // Stop the test after 20 seconds without any packets
-            if time_from_epoch_ms() - last_network > 20_000 {
-                break;
-            }
             match &packet.icmp {
                 ping::Responce::Echo(icmp) => {
                     debug!("{:?}, {:?}: ", packet.source, packet.ttl);
@@ -89,7 +107,7 @@ pub fn run(localip: &str) {
                     let ip = u32::from(packet.source) & 0xFFFFFF00;
                     if mapping.contains_key(&ip) {
                         info!(
-                            "Network {}/24 already seen ({}) {}-{}",
+                            "Network {}/24 already seen ({}) (ttl: {}, dist: {})",
                             Ipv4Addr::from(ip),
                             packet.source,
                             packet.ttl,
@@ -114,7 +132,6 @@ pub fn run(localip: &str) {
                     } else {
                         // New network, send the traceroute packets. There is no need to verify as
                         // We dont store the information of this packet.
-                        last_network = time_from_epoch_ms();
                         info!("New Network {}/24, ttl: {}", Ipv4Addr::from(ip), packet.ttl);
                         mapping.insert(
                             ip,
@@ -137,38 +154,31 @@ pub fn run(localip: &str) {
                 ping::Responce::Timeout(icmp) => {
                     debug!("{:?}, {:?}: ", packet.source, packet.ttl);
                     // The payload contains the EchoRequest packet + 64 bytes of payload if its over UDP or TCP
-                    if let Ok((source, timeout)) = parse_icmp(&icmp.payload) {
+                    if let Ok((target, echo)) = parse_icmp(&icmp.payload) {
                         info!(
-                            "Received timeout for ({:?}, {:?}, {})",
-                            timeout.identifier, timeout.sequence_number, source
+                            "Received timeout from ({:?}, {:?} => {})",
+                            echo.identifier, echo.sequence_number, target
                         );
                         // Verify the packet
-                        if verify_packet(source, timeout.identifier, timeout.sequence_number) {
+                        if verify_packet(target, echo.identifier, echo.sequence_number) {
                             // the packet identification match the queried ip address, add it to the measures
                             update_trace_entry(
                                 &mut mapping,
-                                source,
+                                target,
                                 packet.source,
-                                timeout.sequence_number as u8,
+                                echo.sequence_number as u8,
                                 packet.time_ms,
                             );
 
+                            // mark the /24 of the router in the table, to not process it again
                             let netsrc = u32::from(packet.source) & 0xFFFFFF00;
-                            if !mapping.contains_key(&netsrc) {
-                                mapping.insert(netsrc, TraceConfiguration::new(packet.source, 0));
-                            }
-                            // TODO: Mark the network as measured, to prevent double work.
-                            /*
-                            let netsrc = u32::from(packet.source) & 0xFFFFFF00;
-                            if !mapping.contains_key(&netsrc) {
-                                // mark the /24 of the router in the table, to not process it again
-                                match mapping.entry(netsrc) {
-                                    Entry::Vacant(v) => {
-                                        //v.insert(TraceConfiguration::new(packet.source, 0));
-                                    }
-                                    _ => {}
+                            match mapping.entry(netsrc) {
+                                Entry::Vacant(v) => {
+                                    v.insert(TraceConfiguration::new(packet.source, 0));
                                 }
-                            }*/                        }
+                                _ => {}
+                            }
+                        }
                     }
                 }
                 ping::Responce::Unreachable(_icmp) => {
@@ -177,6 +187,7 @@ pub fn run(localip: &str) {
                 }
                 ping::Responce::LocalSendedEcho(target) => {
                     // Receive the locally written packets, and store the timestamp.
+                    //if !mapping.contains_key
                     update_trace_entry(
                         &mut mapping,
                         *target,
@@ -188,27 +199,10 @@ pub fn run(localip: &str) {
             }
         }
     }
-
-    for (_k, v) in &mapping {
-        let mut ended = false;
-        for t in &v.traces {
-            if let Some(t) = t {
-                if t.router == v.source {
-                    ended = true;
-                    break;
-                }
-            }
-        }
-        if ended {
-            println!("{} founded", v.source);
-        } else {
-            println!("{} not founded", v.source);
-        }
-    }
-
-    println!("{:?}", mapping);
 }
 
+/// Update the entry with the given information
+/// Returns true when the entry was successfuly updated or created
 fn update_trace_entry(
     mapping: &mut HashMap<u32, TraceConfiguration>,
     original_target: Ipv4Addr,
@@ -222,7 +216,7 @@ fn update_trace_entry(
         let index = ttl.saturating_sub(1);
 
         // This should always be set, as we do preallocation
-        // Unless it is a middle node where we dont store the values.
+        // Unless it is a router/middlebox, where we dont store the values.
         if let Some(trace) = tracecofig.traces.get_mut(index as usize) {
             if let Some(measurement) = trace {
                 // We have already setted the value before, calculate the time difference

@@ -13,15 +13,29 @@ fn print_usage(program: &str, opts: Options) {
 
 fn get_options() -> Result<Matches, ()> {
     let mut opts = Options::new();
-    opts.optopt("", "ip", "ip adderss to emit the packets", "ip");
-    opts.optflag("h", "help", "print this help menu");
+    opts.optopt("i", "ip", "IP adderss to emit the packets", "ip");
+    opts.optopt(
+        "p",
+        "pps",
+        "Rate of packets per second to send, considering every packets is 64 bytes or less.",
+        "1000",
+    );
+    opts.optopt(
+        "l",
+        "hitlist",
+        "File containing the histlist, separated by newline",
+        "data/hitlist.txt",
+    );
+    opts.optflag("h", "help", "Print this help menu");
 
     let args: Vec<String> = env::args().collect();
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => panic!(f.to_string()),
     };
-    if matches.opt_present("h") || !matches.opt_present("ip") {
+    if matches.opt_present("h") || !matches.opt_present("ip") || !matches.opt_present("p")
+        || !matches.opt_present("hitlist")
+    {
         let program = args[0].clone();
         print_usage(&program, opts);
         return Err(());
@@ -32,6 +46,12 @@ fn get_options() -> Result<Matches, ()> {
 fn main() {
     env_logger::init();
     if let Ok(opts) = get_options() {
-        run(&opts.opt_str("ip").unwrap());
+        run(
+            &opts.opt_str("hitlist").unwrap(),
+            &opts.opt_str("ip").unwrap(),
+            opts.opt_get("pps")
+                .unwrap_or_else(|_| panic!("--pps must be a u32"))
+                .unwrap(),
+        );
     }
 }
