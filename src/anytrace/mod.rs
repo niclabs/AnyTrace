@@ -124,7 +124,7 @@ pub fn run(hitlist: &str, localip: &str, pps: u32) {
                                     packet.time_ms,
                                 );
                             } else {
-                                error!("Error verifying packet");
+                                error!("Error verifying packet from {}", packet.source);
                             }
                         } else {
                             error!("Error verifying signature");

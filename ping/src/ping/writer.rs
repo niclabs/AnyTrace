@@ -100,7 +100,7 @@ impl PingWriter {
                 sequence: sequence,
                 src_port: src_port,
                 dst_port: dst_port,
-            })
+            })  
             .unwrap();
     }
 
@@ -123,7 +123,7 @@ impl PingWriter {
 
         thread::spawn(move || {
             let mut ratelimit = ratelimit::Builder::new()
-                .capacity(rate_limit)
+                .capacity(1)
                 .frequency(rate_limit)
                 .quantum(1)
                 .build();
