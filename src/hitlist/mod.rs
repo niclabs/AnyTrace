@@ -8,7 +8,7 @@ extern crate serde;
 extern crate serde_json;
 extern crate radix_trie;
 
-use self::radix_trie::Trie;
+use self::radix_trie::{Trie, TrieCommon};
 use self::ipaddress::IPAddress;
 use self::num::bigint::BigUint;
 use self::num_traits::identities::One;
@@ -32,7 +32,6 @@ use std::sync::Mutex;
 use std::thread;
 use hitlist::num::ToPrimitive;
 
-
 pub enum Responce {
     Echo(EchoReply),
     Timeout(TimeExceeded),
@@ -51,6 +50,7 @@ and its state -> alive/not found yet
  */
 #[derive(Debug)]
 pub struct network_state {
+    address: IPAddress,
     current_ip: BigUint,
     state: bool,
     last: bool,
@@ -76,32 +76,29 @@ pub fn net_to_vector(network: &str) -> Vec<u8>
     }
     return vec;
 }
-
-pub fn create_trie(dummy: &str){
+/*create_trie : Vector of strings-> Trie key <vector of bits> Value <Network_state>
+receives a vector of strings containing netowrk addresses, and orders 
+theese in a Trie struct
+ */
+pub fn create_trie(vec: &mut Vec<String>)-> Trie<Vec<u8>, network_state>{
     let mut trie = Trie::new();
-    let mut vec = vec![
-        "1.1.1.0/24",
-        "1.1.1.0/25",
-        "190.124.27.0/24",
-        "1.1.1.0/24",
-        "5.198.248.0/24",
-        "223.233.20.0/20",
-        "223.255.235.0/24",
-    ];
     while vec.len() > 0 {
         let net = (vec.pop().unwrap());
-        let vec = net_to_vector(&net);
-        trie.insert(vec, net);
+        let bit_vec = net_to_vector(&net);
+        let ip_net= str_to_ip(&net);
+        let host_address = ip_net.network().host_address;
+        trie.insert(bit_vec,
+                    network_state {
+                        address: ip_net,
+                        current_ip: host_address,
+                        state: false,
+                        last: false,
+                        }
+                );
     }
-    let m = trie.get_ancestor(&net_to_vector(&"1.1.1.0/32"));
-    println!("{:?}",m);
-    /*for i in "1001".chars() 
-    {
-        println!("{:?}", i.to_digit(10).unwrap());
-    }*/
-}
-
-
+    return trie;
+    
+    }
 
 // Dictionary for reading json file
 type Dictionary = HashMap<String, Vec<String>>;
@@ -111,26 +108,25 @@ pub fn run(dummy: &str) {
     let mut data = String::new();
     file.read_to_string(&mut data).unwrap();
     let dict: Dictionary = serde_json::from_str(&data).unwrap();
-    let mut network_hash = HashMap::new();
+    
+    //let mut network_hash = HashMap::new();
+    let mut network_vec = Vec::new();
 
-    for (key, value) in dict.into_iter() {
+    for (key, value) in dict.into_iter() 
+    {
         let mut vec = value;
-        //let mut network_hash = HashMap::new();
-        while vec.len() > 0 {
-            let net = vec.pop().unwrap();
-            let host_address = str_to_ip(&net).network().host_address;
-            network_hash.insert(
-                net.to_string(),
-                network_state {
-                    current_ip: host_address,
-                    state: false,
-                    last: false,
-                },
-            ); 
-        }
-        //channel_runner_v2(&mut network_hash);
+        network_vec.append(&mut vec);
     }
-    channel_runner(&mut network_hash);
+    //channel_runner(&mut network_hash);
+    println!("vector ready");
+    let trie = create_trie(&mut network_vec);
+    println!("trie ready");
+    let m = trie.get_ancestor(&net_to_vector(&"1.1.1.0/32"));
+    println!("{:?}",m);
+    for (key, value) in trie.iter()
+    {
+        println!("{:?}", key);
+    }
 
 }
 
@@ -141,15 +137,15 @@ pub fn channel_runner(networks: &mut HashMap<String, network_state>) {
         .rate_limit(100)
         .build();
 
-    // canal entre thread lectura escritura
-    // el proceso sender envía mensajes a receiver
+    // channel between read/write thread
+    // sender process sends message to receiver
     let (sender, receiver) = mpsc::channel::<IPAddress>();
     let sender = Arc::new(Mutex::new(sender));
     let r_handler = handler.reader;
     let wr_handler = handler.writer;
 
-    //crear thread para lectura
-    //proceso sender
+    // creating thread for reading
+    // sender process
     let read = thread::spawn(move || {
         let mut sender = sender.lock().unwrap();
         read_alive_ip(&r_handler, &sender);
@@ -176,7 +172,7 @@ pub fn channel_runner(networks: &mut HashMap<String, network_state>) {
             value.current_ip = i.add(BigUint::one());
         }
 
-        //if an ip was received within the network
+        // if an ip was received within the network
         // rewrite the map
        
         while let Ok(ip_received) = receiver.recv_timeout(Duration::from_millis(200)) {

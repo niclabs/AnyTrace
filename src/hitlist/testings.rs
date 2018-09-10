@@ -87,12 +87,6 @@ pub struct network_state {
     last: bool,
 }
 
-struct MyValue
-{
-    key: IPAddress,
-    value: network_state,
-}
-
 /*returns the network mask significant bit */
 pub fn significant_bit (dummy: &str)
 {
