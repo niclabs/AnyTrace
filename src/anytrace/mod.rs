@@ -6,8 +6,8 @@ use self::pnet::packet::FromPacket;
 use self::pnet::packet::Packet;
 use self::pnet::packet::icmp::echo_request::{EchoRequest, EchoRequestPacket};
 use self::pnet::packet::ipv4::Ipv4Packet;
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::Ipv4Addr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -18,7 +18,7 @@ use std::io::{BufRead, BufReader};
 struct TraceConfiguration {
     source: Ipv4Addr,
     max_hop: u8,
-    send_time: u64,
+    current_ttl: u8,
     traces: Vec<Option<Trace>>,
 }
 
@@ -35,9 +35,8 @@ impl TraceConfiguration {
         return TraceConfiguration {
             source: source,
             max_hop: max_hops,
-
             traces: opts,
-            send_time: time_from_epoch_ms(),
+            current_ttl: max_hops,
         };
     }
 }
@@ -61,9 +60,7 @@ impl TraceConfiguration {
 ///             an invalid ip while sending the data)
 ///
 /// Packet format: id: first 16 bits of the dst ip, seq: u8 of the dst ip, u8 ttl
-/// TODO: Change the map to a csv file, and store continuosly. This allow to only store
-///       the ip mask in a trie, making it a lot faster
-///   => Trace (target, source, request_source, ttl_measured, dt) // request_source is the original target (not the timeout target)
+/// Output to stdin (csv): original_target, measured_router, hops, ms
 /// TODO: Add random offset/xor as a key of the packets, so we can differentiate which packets are ours and which are not
 pub fn run(hitlist: &str, localip: &str, pps: u32) {
     let handler = PingHandlerBuilder::new()
@@ -75,9 +72,12 @@ pub fn run(hitlist: &str, localip: &str, pps: u32) {
     let mut mapping: HashMap<u32, TraceConfiguration> = HashMap::new();
     let file = File::open(hitlist).unwrap();
     let mut lines = BufReader::new(file).lines();
+    let mut check: VecDeque<(u32, u64)> = VecDeque::new(); // (ip, nexttime)
+    let mut seen = HashSet::new();
+    println!("original_target, measured_router, hops, ms");
     loop {
         let mut end = true;
-        for _ in 0..pps {
+        for _ in 0..(pps*100) {
             if let Some(line) = lines.next() {
                 if let Ok(ip) = line.unwrap().parse() {
                     let ip: Ipv4Addr = ip;
@@ -90,8 +90,46 @@ pub fn run(hitlist: &str, localip: &str, pps: u32) {
                 }
             }
         }
-        if end {
+        if end && check.is_empty() {
             break;
+        }
+
+        // Get all ip addresses that we havent received timeout and send the next ttl
+        // only if we havent see the /24
+        let current_time = time_from_epoch_ms();
+        while !check.is_empty() {
+            let (ip, time) = check[0];
+            if time < current_time {
+                check.pop_front();
+                if let Some(trace) = mapping.get_mut(&ip) {
+                    // Extract next packet metadata and update trace
+                    trace.current_ttl = trace.current_ttl.saturating_sub(1);
+                    if trace.current_ttl >= 1 {
+                        // Send the next packet
+                        let (identifier, sequence) = encode_id_seq(ip, trace.current_ttl);
+                        handler.writer.send_complete(
+                            trace.source,
+                            0,
+                            0,
+                            trace.current_ttl,
+                            identifier,
+                            sequence,
+                        );
+
+                        // Only insert if the next ttl is valid
+                        if trace.current_ttl > 1 {
+                            check.push_back((ip, time_from_epoch_ms() + 1 * 1000));
+                        }
+                    }
+                } else {
+                    panic!(
+                        "IP Address {:?} in trace queue while not in `mapping`",
+                        Ipv4Addr::from(ip)
+                    );
+                }
+            } else {
+                break;
+            }
         }
 
         // TODO: Change rec_timeout break, as we arent counting packets that are not ours
@@ -102,7 +140,6 @@ pub fn run(hitlist: &str, localip: &str, pps: u32) {
         {
             match &packet.icmp {
                 ping::Responce::Echo(icmp) => {
-                    debug!("{:?}, {:?}: ", packet.source, packet.ttl);
                     // Check if this is a new IP Address, only using his /24
                     let ip = u32::from(packet.source) & 0xFFFFFF00;
                     if mapping.contains_key(&ip) {
@@ -137,22 +174,25 @@ pub fn run(hitlist: &str, localip: &str, pps: u32) {
                             ip,
                             TraceConfiguration::new(packet.source, get_max_ttl(&packet)),
                         );
-                        for i in 0..get_max_ttl(&packet) {
-                            let head: u16 = (ip >> 16) as u16;
-                            let tail: u16 = (ip | (i + 1) as u32) as u16;
-                            handler.writer.send_complete(
-                                packet.source,
-                                0,
-                                0,
-                                i + 1, // ttl
-                                head,  // identifier
-                                tail,  // sequence
-                            );
-                        }
+
+                        // Send the max ttl and add it to the queue
+                        let ttl = get_max_ttl(&packet);
+                        let (identifier, sequence) = encode_id_seq(ip, ttl);
+                        handler.writer.send_complete(
+                            packet.source,
+                            0,
+                            0,
+                            ttl as u8,
+                            identifier,
+                            sequence,
+                        );
+                        check.push_back((
+                            get_ip_mask(packet.source),
+                            time_from_epoch_ms() + 1 * 1000,
+                        ));
                     }
                 }
                 ping::Responce::Timeout(icmp) => {
-                    debug!("{:?}, {:?}: ", packet.source, packet.ttl);
                     // The payload contains the EchoRequest packet + 64 bytes of payload if its over UDP or TCP
                     if let Ok((target, echo)) = parse_icmp(&icmp.payload) {
                         info!(
@@ -161,22 +201,50 @@ pub fn run(hitlist: &str, localip: &str, pps: u32) {
                         );
                         // Verify the packet
                         if verify_packet(target, echo.identifier, echo.sequence_number) {
-                            // the packet identification match the queried ip address, add it to the measures
-                            update_trace_entry(
-                                &mut mapping,
-                                target,
-                                packet.source,
-                                echo.sequence_number as u8,
-                                packet.time_ms,
-                            );
-
-                            // mark the /24 of the router in the table, to not process it again
-                            let netsrc = u32::from(packet.source) & 0xFFFFFF00;
-                            match mapping.entry(netsrc) {
-                                Entry::Vacant(v) => {
-                                    v.insert(TraceConfiguration::new(packet.source, 0));
+                            let mut founded = false;
+                            if let Some(trace) = mapping.get_mut(&get_ip_mask(target)) {
+                                founded = true;
+                                update_trace(
+                                    trace,
+                                    target,
+                                    packet.source,
+                                    echo.sequence_number as u8,
+                                    packet.time_ms,
+                                );
+                                // Check if ip was already seen, and mark as done if the route has already been processed
+                                if seen.contains(&packet.source) {
+                                    // Only skip if the last hop is not the same ip address, as some use the same router for more than one hop
+                                    let mut skip = false;
+                                    if let Some(Some(upper)) = trace.traces.get(((echo.sequence_number as u8) as usize) + 1 - 1) {
+                                        if upper.router == packet.source {
+                                            skip = true;
+                                        }
+                                    }
+                                    if !skip {
+                                        debug!(
+                                            "Already seen router timeout, skipping {}",
+                                            packet.source
+                                        );
+                                        trace.current_ttl = 0;
+                                    }
+                                    continue;
                                 }
-                                _ => {}
+
+                                // Add the router to the seen table, so we dont process it again
+                                seen.insert(packet.source);
+                            }
+                            if founded {
+                                // Mark the /24 of the router in the table, so we don't start new traces to the target
+                                let netsrc = u32::from(packet.source) & 0xFFFFFF00;
+                                match mapping.entry(netsrc) {
+                                    Entry::Vacant(v) => {
+                                        v.insert(TraceConfiguration::new(packet.source, 0));
+                                    }
+                                    Entry::Occupied(mut trace) => {
+                                        // The router is already in the map, mark the trace as done
+                                        trace.get_mut().current_ttl = 0;
+                                    }
+                                }
                             }
                         }
                     }
@@ -187,7 +255,6 @@ pub fn run(hitlist: &str, localip: &str, pps: u32) {
                 }
                 ping::Responce::LocalSendedEcho(target) => {
                     // Receive the locally written packets, and store the timestamp.
-                    //if !mapping.contains_key
                     update_trace_entry(
                         &mut mapping,
                         *target,
@@ -202,7 +269,6 @@ pub fn run(hitlist: &str, localip: &str, pps: u32) {
 }
 
 /// Update the entry with the given information
-/// Returns true when the entry was successfuly updated or created
 fn update_trace_entry(
     mapping: &mut HashMap<u32, TraceConfiguration>,
     original_target: Ipv4Addr,
@@ -211,42 +277,63 @@ fn update_trace_entry(
     time_ms: u64,
 ) {
     let source_net = u32::from(original_target) & 0xFFFFFF00;
-    if let Some(tracecofig) = mapping.get_mut(&source_net) {
-        // get the index as ttl-1, making sure we dont overflow
-        let index = ttl.saturating_sub(1);
+    if let Some(trace) = mapping.get_mut(&source_net) {
+        update_trace(trace, original_target, packet_source, ttl, time_ms);
+    }
+}
 
-        // This should always be set, as we do preallocation
-        // Unless it is a router/middlebox, where we dont store the values.
-        if let Some(trace) = tracecofig.traces.get_mut(index as usize) {
-            if let Some(measurement) = trace {
-                // We have already setted the value before, calculate the time difference
-                measurement.ms =
-                    u64::max(measurement.ms, time_ms) - u64::min(measurement.ms, time_ms);
+/// Update the entry with the given information
+fn update_trace(
+    traceconf: &mut TraceConfiguration,
+    original_target: Ipv4Addr,
+    packet_source: Ipv4Addr,
+    ttl: u8,
+    time_ms: u64,
+) {
+    // get the index as ttl-1, making sure we dont overflow
+    let index = ttl.saturating_sub(1);
 
-                if measurement.router.is_unspecified() {
-                    measurement.router = packet_source;
-                }
-                println!(
-                    "{}, {}, {}, {}",
-                    original_target, measurement.router, measurement.hops, measurement.ms
-                );
-            } else {
-                *trace = Some(Trace {
-                    router: packet_source,
-                    hops: ttl,
-                    ms: time_ms,
-                });
+    // This should always be set, as we do preallocation
+    // Unless it is a router/middlebox, where we dont store the values.
+    if let Some(trace) = traceconf.traces.get_mut(index as usize) {
+        if let Some(measurement) = trace {
+            // We have already setted the value before, calculate the time difference
+            measurement.ms = u64::max(measurement.ms, time_ms) - u64::min(measurement.ms, time_ms);
+
+            if measurement.router.is_unspecified() {
+                measurement.router = packet_source;
             }
+            println!(
+                "{}, {}, {}, {}",
+                original_target, measurement.router, measurement.hops, measurement.ms
+            );
+        } else {
+            *trace = Some(Trace {
+                router: packet_source,
+                hops: ttl,
+                ms: time_ms,
+            });
         }
     }
 }
 
+/// Encode the ip address and the ttl into the id and sequence number
+/// Return the tuple (identifier, sequence_number)
+fn encode_id_seq(address: u32, ttl: u8) -> (u16, u16) {
+    let ip = u32::from(address) & 0xFFFFFF00;
+    let identifier: u16 = (ip >> 16) as u16;
+    let sequence: u16 = (ip as u16) | (ttl as u16);
+    return (identifier, sequence);
+}
+
+/// Verify the ICMP packet source with his identifier and sequence
 fn verify_packet(source: Ipv4Addr, identifier: u16, sequence: u16) -> bool {
     let network = u32::from(source) & 0xFFFFFF00;
     let ip = ((identifier as u32) << 16) | (sequence & 0xFF00) as u32;
     return network == ip;
 }
 
+/// Calculate the aproximate distance in hops to the given packet
 fn get_max_ttl(packet: &IcmpResponce) -> u8 {
     let common = [64, 128, 255];
     for item in common.iter() {
@@ -268,6 +355,11 @@ fn parse_icmp(data: &Vec<u8>) -> Result<(Ipv4Addr, EchoRequest), ()> {
         }
     }
     return Err(());
+}
+
+/// Get the /24 mask of the given ip address as an u32
+fn get_ip_mask(address: Ipv4Addr) -> u32 {
+    return u32::from(address) & 0xFFFFFF00;
 }
 
 /// Get the current time in milliseconds
