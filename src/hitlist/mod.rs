@@ -3,12 +3,11 @@ extern crate num;
 extern crate num_traits;
 extern crate ping;
 extern crate pnet;
+extern crate radix_trie;
 extern crate rustc_serialize;
 extern crate serde;
 extern crate serde_json;
-extern crate radix_trie;
 
-use self::radix_trie::{Trie, TrieCommon};
 use self::ipaddress::IPAddress;
 use self::num::bigint::BigUint;
 use self::num_traits::identities::One;
@@ -19,10 +18,13 @@ use self::pnet::packet::icmp::destination_unreachable::DestinationUnreachable;
 use self::pnet::packet::icmp::echo_reply::EchoReply;
 use self::pnet::packet::icmp::time_exceeded::TimeExceeded;
 use self::pnet::packet::Packet;
+use self::radix_trie::{Trie, TrieCommon};
 use std::net::Ipv4Addr;
 use std::ops::Add;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use hitlist::num::ToPrimitive;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
@@ -30,7 +32,6 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
-use hitlist::num::ToPrimitive;
 
 pub enum Responce {
     Echo(EchoReply),
@@ -63,42 +64,40 @@ pub fn str_to_ip(network: &str) -> IPAddress {
 
 /*net_to_vector recieves a network string and returns a vector of bits 
 for the net  */
-pub fn net_to_vector(network: &str) -> Vec<u8>
-{
-    let ip= str_to_ip(network);
+pub fn net_to_vector(network: &str) -> Vec<u8> {
+    let ip = str_to_ip(network);
     let host = ip.host_address.to_u32().unwrap();
     let mut vec = Vec::new();
     let mask = ip.prefix.get_prefix();
-    for i in 0..mask
-    {
-        let num = ((host >> 31- i) & 1) as u8;
+    for i in 0..mask {
+        let num = ((host >> 31 - i) & 1) as u8;
         vec.push(num);
     }
     return vec;
 }
 /*create_trie : Vector of strings-> Trie key <vector of bits> Value <Network_state>
-receives a vector of strings containing netowrk addresses, and orders 
+receives a vector of strings containing network addresses, and orders 
 theese in a Trie struct
  */
-pub fn create_trie(vec: &mut Vec<String>)-> Trie<Vec<u8>, network_state>{
+pub fn create_trie(vec: &mut Vec<String>) -> Trie<Vec<u8>, RefCell<network_state>> {
     let mut trie = Trie::new();
     while vec.len() > 0 {
         let net = (vec.pop().unwrap());
         let bit_vec = net_to_vector(&net);
-        let ip_net= str_to_ip(&net);
+        let ip_net = str_to_ip(&net);
         let host_address = ip_net.network().host_address;
-        trie.insert(bit_vec,
-                    network_state {
-                        address: ip_net,
-                        current_ip: host_address,
-                        state: false,
-                        last: false,
-                        }
-                );
+        trie.insert(
+            bit_vec,
+            RefCell::new(network_state {
+                address: ip_net,
+                current_ip: host_address,
+                state: false,
+                last: false,
+            }),
+        );
     }
     return trie;
-    
-    }
+}
 
 // Dictionary for reading json file
 type Dictionary = HashMap<String, Vec<String>>;
@@ -108,29 +107,27 @@ pub fn run(dummy: &str) {
     let mut data = String::new();
     file.read_to_string(&mut data).unwrap();
     let dict: Dictionary = serde_json::from_str(&data).unwrap();
-    
-    //let mut network_hash = HashMap::new();
     let mut network_vec = Vec::new();
 
-    for (key, value) in dict.into_iter() 
-    {
+    for (key, value) in dict.into_iter() {
         let mut vec = value;
         network_vec.append(&mut vec);
     }
     //channel_runner(&mut network_hash);
-    println!("vector ready");
+    //println!("vector ready");
     let trie = create_trie(&mut network_vec);
     println!("trie ready");
     let m = trie.get_ancestor(&net_to_vector(&"1.1.1.0/32"));
-    println!("{:?}",m);
-    for (key, value) in trie.iter()
-    {
+    println!("{:?}", m);
+    for (key, value) in trie.iter() {
+        //trie.get_mut(key).unwrap()
+        value.borrow_mut().state = true;
+        println!("{:?}", value.borrow().state);
         println!("{:?}", key);
     }
-
 }
 
-pub fn channel_runner(networks: &mut HashMap<String, network_state>) {
+pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
     let handler = PingHandlerBuilder::new()
         .localip("172.30.65.57")
         .method(PingMethod::ICMP)
@@ -153,48 +150,42 @@ pub fn channel_runner(networks: &mut HashMap<String, network_state>) {
 
     // writer process
     loop {
-        //let mut dead = false;
-        //let mut dead_nw = 0;
-        for (key, value) in networks.into_iter() {
-            if value.state || value.last {
+        let mut mybreak = true;
+
+        for (key, value) in networks.iter() {
+            if value.borrow().state || value.borrow().last {
                 continue;
             }
-            let aux_key = key.clone();
-            let ip_network = IPAddress::parse(aux_key).unwrap();
-            // se crea thread para escritura
-            let i = value.current_ip.clone();
-            let ip = ip_network.from(&value.current_ip, &ip_network.prefix);
+            mybreak = false;
+            let ip_network = value.borrow().address.clone();
+            //reading thread created
+            let i = value.borrow().current_ip.clone();
+            let ip = ip_network.from(&value.borrow().current_ip, &ip_network.prefix);
             let last = ip_network.last();
             write_alive_ip(&ip, &wr_handler);
             if (ip == last) {
-                value.last = true;
+                value.borrow_mut().last = true;
             }
-            value.current_ip = i.add(BigUint::one());
+            value.borrow_mut().current_ip = i.add(BigUint::one());
         }
 
         // if an ip was received within the network
         // rewrite the map
-       
+
         while let Ok(ip_received) = receiver.recv_timeout(Duration::from_millis(200)) {
-            for (key, value) in networks.into_iter() {
-                if value.state {continue;}
-                let aux_key = key.clone();
-                let mut network = IPAddress::parse(aux_key).unwrap();
-                //let mut network = IPAddress::parse(format!("{:?}", key)).unwrap();
-                if network.includes(&ip_received){
-                    value.state = true;
+            for (key, value) in networks.iter() {
+                if value.borrow().state {
+                    continue;
+                }
+                let mut network = value.borrow().address.clone();
+                if network.includes(&ip_received) {
+                    value.borrow_mut().state = true;
                     println!("{:?}", ip_received.to_s());
-                    //return Ok(ip_received);
                     break;
                 }
             }
         }
-        let mut mybreak = true;
-        for (key, value) in networks.into_iter() {
-            if (!value.state && !value.last) {
-                mybreak = false;
-            }
-        }
+
         if mybreak {
             break;
         }
