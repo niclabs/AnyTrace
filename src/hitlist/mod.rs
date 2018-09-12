@@ -64,8 +64,7 @@ pub fn str_to_ip(network: &str) -> IPAddress {
 
 /*net_to_vector recieves a network string and returns a vector of bits 
 for the net  */
-pub fn net_to_vector(network: &str) -> Vec<u8> {
-    let ip = str_to_ip(network);
+pub fn net_to_vector(ip: &IPAddress) -> Vec<u8> {
     let host = ip.host_address.to_u32().unwrap();
     let mut vec = Vec::new();
     let mask = ip.prefix.get_prefix();
@@ -82,9 +81,9 @@ theese in a Trie struct
 pub fn create_trie(vec: &mut Vec<String>) -> Trie<Vec<u8>, RefCell<network_state>> {
     let mut trie = Trie::new();
     while vec.len() > 0 {
-        let net = (vec.pop().unwrap());
-        let bit_vec = net_to_vector(&net);
+        let net = vec.pop().unwrap();
         let ip_net = str_to_ip(&net);
+        let bit_vec = net_to_vector(&ip_net);
         let host_address = ip_net.network().host_address;
         trie.insert(
             bit_vec,
@@ -117,14 +116,14 @@ pub fn run(dummy: &str) {
     //println!("vector ready");
     let trie = create_trie(&mut network_vec);
     println!("trie ready");
-    let m = trie.get_ancestor(&net_to_vector(&"1.1.1.0/32"));
+    let m = trie.get_ancestor(&net_to_vector(&str_to_ip(&"1.1.1.0/32")));
     println!("{:?}", m);
-    for (key, value) in trie.iter() {
+    /*for (key, value) in trie.iter() {
         //trie.get_mut(key).unwrap()
         value.borrow_mut().state = true;
         println!("{:?}", value.borrow().state);
         println!("{:?}", key);
-    }
+    }*/
 }
 
 pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
@@ -163,7 +162,7 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
             let ip = ip_network.from(&value.borrow().current_ip, &ip_network.prefix);
             let last = ip_network.last();
             write_alive_ip(&ip, &wr_handler);
-            if (ip == last) {
+            if ip == last{
                 value.borrow_mut().last = true;
             }
             value.borrow_mut().current_ip = i.add(BigUint::one());
@@ -173,17 +172,33 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
         // rewrite the map
 
         while let Ok(ip_received) = receiver.recv_timeout(Duration::from_millis(200)) {
-            for (key, value) in networks.iter() {
-                if value.borrow().state {
-                    continue;
+
+            let mut vec = net_to_vector(&ip_received);
+            let mut node_match = networks.get_ancestor(&vec);
+
+            loop
+            { 
+                if let Some(node)= *node_match{
+                        
+                    let value = node.value().unwrap();
+                    let network_add = value.borrow().address.clone();
+                    if value.borrow().state || !network_add.includes(&ip_received)
+                    {
+                        let len = vec.len() -1;
+                        vec.truncate(len);
+                        node_match = &networks.get_ancestor(&vec);
+                        continue; 
+                    }
+                    if network_add.includes(&ip_received){
+                        value.borrow_mut().state = true;
+                        println!("{:?}", ip_received.to_s());
+                        break;
+                    }
                 }
-                let mut network = value.borrow().address.clone();
-                if network.includes(&ip_received) {
-                    value.borrow_mut().state = true;
-                    println!("{:?}", ip_received.to_s());
-                    break;
-                }
+                else{ break;}
             }
+            //if there is no match for the ip's prefix
+            continue;
         }
 
         if mybreak {
