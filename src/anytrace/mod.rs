@@ -1,25 +1,25 @@
 extern crate ping;
 extern crate pnet;
 
-use self::ping::{IcmpResponce, PingHandler, PingHandlerBuilder, PingMethod};
-use self::pnet::packet::FromPacket;
-use self::pnet::packet::Packet;
-use self::pnet::packet::icmp::echo_request::{EchoRequest, EchoRequestPacket};
-use self::pnet::packet::ipv4::Ipv4Packet;
+use self::ping::{PingHandler, PingHandlerBuilder, PingMethod};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::Ipv4Addr;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration};
 
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+
+mod helper;
+use self::helper::{encode_id_seq,verify_packet,get_max_ttl,parse_icmp,get_ip_mask,time_from_epoch_ms};
+
 
 #[derive(Debug)]
 struct TraceConfiguration {
     source: Ipv4Addr,
     max_hop: u8,
     current_ttl: u8,
-    traces: Vec<Option<Trace>>,
+    traces: Vec<Option<Trace>>, //TODO: Check before overriding, as some ips (91.68.246.158) may send multiple packets
 }
 
 #[derive(Debug, Clone)]
@@ -77,7 +77,7 @@ pub fn run(hitlist: &str, localip: &str, pps: u32) {
     println!("original_target, measured_router, hops, ms");
     loop {
         let mut end = true;
-        for _ in 0..(pps*100) {
+        for _ in 0..pps {
             if let Some(line) = lines.next() {
                 if let Ok(ip) = line.unwrap().parse() {
                     let ip: Ipv4Addr = ip;
@@ -249,9 +249,10 @@ pub fn run(hitlist: &str, localip: &str, pps: u32) {
                         }
                     }
                 }
-                ping::Responce::Unreachable(_icmp) => {
-                    //parse_icmp(&icmp.payload);
-                    //println!("Received unreachable for ({:?}, {:?})", icmp.icmp_type, icmp.icmp_code);
+                ping::Responce::Unreachable(icmp) => {
+                    // This is received from the UDP ping
+                    println!("{:?}", parse_icmp(&icmp.payload));
+                    println!("Received unreachable for ({:?}, {:?})", icmp.icmp_type, icmp.icmp_code);
                 }
                 ping::Responce::LocalSendedEcho(target) => {
                     // Receive the locally written packets, and store the timestamp.
@@ -317,58 +318,3 @@ fn update_trace(
     }
 }
 
-/// Encode the ip address and the ttl into the id and sequence number
-/// Return the tuple (identifier, sequence_number)
-fn encode_id_seq(address: u32, ttl: u8) -> (u16, u16) {
-    let ip = u32::from(address) & 0xFFFFFF00;
-    let identifier: u16 = (ip >> 16) as u16;
-    let sequence: u16 = (ip as u16) | (ttl as u16);
-    return (identifier, sequence);
-}
-
-/// Verify the ICMP packet source with his identifier and sequence
-fn verify_packet(source: Ipv4Addr, identifier: u16, sequence: u16) -> bool {
-    let network = u32::from(source) & 0xFFFFFF00;
-    let ip = ((identifier as u32) << 16) | (sequence & 0xFF00) as u32;
-    return network == ip;
-}
-
-/// Calculate the aproximate distance in hops to the given packet
-fn get_max_ttl(packet: &IcmpResponce) -> u8 {
-    let common = [64, 128, 255];
-    for item in common.iter() {
-        if packet.ttl <= *item {
-            return *item - packet.ttl + 1 + 1; // Adding one extra for padding
-        }
-    }
-    unreachable!();
-}
-
-/// Get the inner icmp information from a timeout packet.
-/// Return the source address and the icmp echo request.
-fn parse_icmp(data: &Vec<u8>) -> Result<(Ipv4Addr, EchoRequest), ()> {
-    if let Some(ipv4) = Ipv4Packet::new(data) {
-        if let Some(icmp) = EchoRequestPacket::new(ipv4.payload()) {
-            let icmp = icmp.from_packet();
-            // The payload is empty for icmp packets if they are not from TCP or UDP packets
-            return Ok((Ipv4Addr::from(ipv4.get_destination()), icmp));
-        }
-    }
-    return Err(());
-}
-
-/// Get the /24 mask of the given ip address as an u32
-fn get_ip_mask(address: Ipv4Addr) -> u32 {
-    return u32::from(address) & 0xFFFFFF00;
-}
-
-/// Get the current time in milliseconds
-fn time_from_epoch_ms() -> u64 {
-    let start = SystemTime::now();
-    let since_the_epoch = start
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards");
-    let in_ms =
-        since_the_epoch.as_secs() * 1000 + since_the_epoch.subsec_nanos() as u64 / 1_000_000;
-    return in_ms;
-}
