@@ -1,7 +1,7 @@
 extern crate ping;
 extern crate pnet;
 
-use self::ping::{PingHandler, PingHandlerBuilder, PingMethod};
+use self::ping::{PingHandler, PingHandlerBuilder, PingMethod, IcmpResponce};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::Ipv4Addr;
@@ -65,7 +65,7 @@ impl TraceConfiguration {
 pub fn run(hitlist: &str, localip: &str, pps: u32) {
     let handler = PingHandlerBuilder::new()
         .localip(localip)
-        .method(PingMethod::ICMP)
+        .method(PingMethod::UDP)
         .rate_limit(pps)
         .build();
 
@@ -167,29 +167,7 @@ pub fn run(hitlist: &str, localip: &str, pps: u32) {
                             error!("Error verifying signature");
                         }
                     } else {
-                        // New network, send the traceroute packets. There is no need to verify as
-                        // We dont store the information of this packet.
-                        info!("New Network {}/24, ttl: {}", Ipv4Addr::from(ip), packet.ttl);
-                        mapping.insert(
-                            ip,
-                            TraceConfiguration::new(packet.source, get_max_ttl(&packet)),
-                        );
-
-                        // Send the max ttl and add it to the queue
-                        let ttl = get_max_ttl(&packet);
-                        let (identifier, sequence) = encode_id_seq(ip, ttl);
-                        handler.writer.send_complete(
-                            packet.source,
-                            0,
-                            0,
-                            ttl as u8,
-                            identifier,
-                            sequence,
-                        );
-                        check.push_back((
-                            get_ip_mask(packet.source),
-                            time_from_epoch_ms() + 1 * 1000,
-                        ));
+                        process_new_entry(&packet, &mut mapping, &mut check, &handler);
                     }
                 }
                 ping::Responce::Timeout(icmp) => {
@@ -249,10 +227,10 @@ pub fn run(hitlist: &str, localip: &str, pps: u32) {
                         }
                     }
                 }
-                ping::Responce::Unreachable(icmp) => {
-                    // This is received from the UDP ping
-                    println!("{:?}", parse_icmp(&icmp.payload));
-                    println!("Received unreachable for ({:?}, {:?})", icmp.icmp_type, icmp.icmp_code);
+                ping::Responce::Unreachable(_icmp) => {
+                    // This is received from the UDP ping. the payload contains the inner icmp request without the payload
+                    // TODO: verify the packet without the signature to calculate the latency
+                    process_new_entry(&packet, &mut mapping, &mut check, &handler);
                 }
                 ping::Responce::LocalSendedEcho(target) => {
                     // Receive the locally written packets, and store the timestamp.
@@ -266,6 +244,35 @@ pub fn run(hitlist: &str, localip: &str, pps: u32) {
                 }
             }
         }
+    }
+}
+
+fn process_new_entry(packet: &IcmpResponce, mapping: &mut HashMap<u32, TraceConfiguration>, check: &mut VecDeque<(u32, u64)>, handler: &PingHandler) {
+    let ip = u32::from(packet.source) & 0xFFFFFF00;
+    if !mapping.contains_key(&ip) {
+        // New network, send the traceroute packets. There is no need to verify as
+        // We dont store the information of this packet.
+        info!("New Network {}/24, ttl: {}", Ipv4Addr::from(ip), packet.ttl);
+        mapping.insert(
+            ip,
+            TraceConfiguration::new(packet.source, get_max_ttl(&packet)),
+        );
+
+        // Send the max ttl and add it to the queue
+        let ttl = get_max_ttl(&packet);
+        let (identifier, sequence) = encode_id_seq(ip, ttl);
+        handler.writer.send_complete(
+            packet.source,
+            0,
+            0,
+            ttl as u8,
+            identifier,
+            sequence,
+        );
+        check.push_back((
+            get_ip_mask(packet.source),
+            time_from_epoch_ms() + 1 * 1000,
+        ));
     }
 }
 
