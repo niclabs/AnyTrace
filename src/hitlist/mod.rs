@@ -18,7 +18,7 @@ use self::pnet::packet::icmp::destination_unreachable::DestinationUnreachable;
 use self::pnet::packet::icmp::echo_reply::EchoReply;
 use self::pnet::packet::icmp::time_exceeded::TimeExceeded;
 use self::pnet::packet::Packet;
-use self::radix_trie::{Trie, TrieCommon};
+use self::radix_trie::{SubTrie, Trie, TrieCommon};
 use std::net::Ipv4Addr;
 use std::ops::Add;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -114,16 +114,8 @@ pub fn run(dummy: &str) {
     }
     //channel_runner(&mut network_hash);
     //println!("vector ready");
-    let trie = create_trie(&mut network_vec);
-    println!("trie ready");
-    let m = trie.get_ancestor(&net_to_vector(&str_to_ip(&"1.1.1.0/32")));
-    println!("{:?}", m);
-    /*for (key, value) in trie.iter() {
-        //trie.get_mut(key).unwrap()
-        value.borrow_mut().state = true;
-        println!("{:?}", value.borrow().state);
-        println!("{:?}", key);
-    }*/
+    let mut trie = create_trie(&mut network_vec);
+    channel_runner(&mut trie);
 }
 
 pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
@@ -162,7 +154,7 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
             let ip = ip_network.from(&value.borrow().current_ip, &ip_network.prefix);
             let last = ip_network.last();
             write_alive_ip(&ip, &wr_handler);
-            if ip == last{
+            if ip == last {
                 value.borrow_mut().last = true;
             }
             value.borrow_mut().current_ip = i.add(BigUint::one());
@@ -172,21 +164,28 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
         // rewrite the map
 
         while let Ok(ip_received) = receiver.recv_timeout(Duration::from_millis(200)) {
-
             let mut vec = net_to_vector(&ip_received);
-            let mut node_match = networks.get_ancestor(&vec);
+            let mut node_match_op = networks.get_ancestor(&vec);
 
-            loop
-            { 
-                if let Some(node)= *node_match{
+            loop {
+                if node_match_op.is_some() {
+                    // unwrap option value-> returns subtrie
+                    let node = return_unwrap(&node_match_op);
+                    println!("works");
+                } else {
+                    println!("also works");
+                    continue;
+                }
+                /*
+                if !node_match.is_none(){
                         
-                    let value = node.value().unwrap();
+                    let value = node_match.unwrap().value().unwrap();
                     let network_add = value.borrow().address.clone();
                     if value.borrow().state || !network_add.includes(&ip_received)
                     {
                         let len = vec.len() -1;
                         vec.truncate(len);
-                        node_match = &networks.get_ancestor(&vec);
+                        node_match = networks.get_ancestor(&vec);
                         continue; 
                     }
                     if network_add.includes(&ip_received){
@@ -195,10 +194,10 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
                         break;
                     }
                 }
-                else{ break;}
+                else{ break;}*/
             }
             //if there is no match for the ip's prefix
-            continue;
+            // continue;
         }
 
         if mybreak {
@@ -207,6 +206,11 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
         // if all true break
     }
 }
+
+fn return_unwrap<'a>(op: & Option<SubTrie<'a, Vec<u8>, RefCell<network_state>>>)
+ -> SubTrie<'a, Vec<u8>, RefCell<network_state>> {
+    return op.unwrap();
+    }
 
 /* write_aliv_ip : &IPAdress x &PingHAndles -> Void
 sends a ping to ip adress "ip" using handler param
