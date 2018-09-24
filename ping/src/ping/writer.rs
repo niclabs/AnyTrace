@@ -178,7 +178,7 @@ impl PingWriter {
             let mut udp = MutableUdpPacket::new(buffer).unwrap();
             udp.set_source(request.src_port);
             udp.set_destination(request.dst_port);
-            udp.set_length(8+12);
+            udp.set_length(8+14);
             udp.set_checksum(0);
         }
         Self::set_payload(&mut buffer[8..], request.identifier, request.sequence);

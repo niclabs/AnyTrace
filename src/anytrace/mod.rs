@@ -121,8 +121,8 @@ pub fn run(hitlist: &str, localip: &str, pps: u32) {
                         let (identifier, sequence) = encode_id_seq(ip, trace.current_ttl);
                         handler.writer.send_complete(
                             trace.source,
-                            0,
-                            0,
+                            identifier,
+                            sequence,
                             trace.current_ttl,
                             identifier,
                             sequence,
@@ -183,14 +183,15 @@ pub fn run(hitlist: &str, localip: &str, pps: u32) {
                     }
                 }
                 ping::Responce::Timeout(icmp) => {
+                    info!("Received timeout from ({})", packet.source);
                     // The payload contains the EchoRequest packet + 64 bytes of payload if its over UDP or TCP
-                    if let Ok((target, echo)) = parse_icmp(&icmp.payload) { // TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
+                    if let Ok((target, id, seq)) = parse_icmp(&icmp.payload) {
                         info!(
                             "Received timeout from (id: {:?}, seq: {:?} => target: {})",
-                            echo.identifier, echo.sequence_number, target
+                            id, seq, target
                         );
                         // Verify the packet
-                        if verify_packet(target, echo.identifier, echo.sequence_number) {
+                        if verify_packet(target, id, seq) {
                             let mut founded = false;
                             if let Some(trace) = mapping.get_mut(&get_ip_mask(target)) {
                                 founded = true;
@@ -198,16 +199,15 @@ pub fn run(hitlist: &str, localip: &str, pps: u32) {
                                     trace,
                                     target,
                                     packet.source,
-                                    echo.sequence_number as u8,
+                                    seq as u8,
                                     packet.time_ms,
                                 );
                                 // Check if ip was already seen, and mark as done if the route has already been processed
                                 if seen.contains(&packet.source) {
                                     // Only skip if the last hop is not the same ip address, as some use the same router for more than one hop
                                     let mut skip = false;
-                                    if let Some(Some(upper)) = trace
-                                        .traces
-                                        .get(((echo.sequence_number as u8) as usize) + 1 - 1)
+                                    if let Some(Some(upper)) =
+                                        trace.traces.get(((seq as u8) as usize) + 1 - 1)
                                     {
                                         if upper.router == packet.source {
                                             skip = true;
@@ -259,24 +259,20 @@ pub fn run(hitlist: &str, localip: &str, pps: u32) {
                             packet.ttl,
                             get_max_ttl(&packet)
                         );
-                        info!("{:?}", icmp.payload);
-                        if let Ok((_, icmp)) = parse_icmp(&icmp.payload) {
+
+                        if let Ok((_, id, seq)) = parse_icmp(&icmp.payload) {
                             // Use the last two bytes as id and seq
                             if icmp.payload.len() >= 2 {
-                                if verify_packet(
-                                    packet.source,
-                                    (icmp.payload[0] as u16),
-                                    icmp.payload[1] as u16,
-                                ) {
+                                if verify_packet(packet.source, id, seq) {
                                     update_trace_entry(
                                         &mut mapping,
                                         packet.source,
                                         packet.source,
-                                        icmp.sequence_number as u8,
+                                        seq as u8,
                                         packet.time_ms,
                                     );
                                 } else {
-                                    error!("Error verifying unreachable packet from {}", packet.source);
+                                    //error!("Error verifying unreachable packet from {}", packet.source);
                                 }
                             }
                         } else {
@@ -312,7 +308,12 @@ fn process_new_entry(
     let ip = get_ip_mask(packet.source);
     // New network, send the traceroute packets. There is no need to verify as
     // We dont store the information of this packet.
-    info!("New Network {}/24, ttl: {}", Ipv4Addr::from(ip), packet.ttl);
+    info!(
+        "New Network {}/24, ttl: {}, starting dist: {}",
+        Ipv4Addr::from(ip),
+        packet.ttl,
+        get_max_ttl(&packet)
+    );
     mapping.insert(
         ip,
         TraceConfiguration::new(packet.source, get_max_ttl(&packet)),
