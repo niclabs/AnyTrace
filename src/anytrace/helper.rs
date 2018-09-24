@@ -1,11 +1,12 @@
-extern crate pnet;
 extern crate ping;
+extern crate pnet;
 
-use self::ping::{IcmpResponce};
+use self::ping::IcmpResponce;
 use self::pnet::packet::FromPacket;
 use self::pnet::packet::Packet;
 use self::pnet::packet::icmp::echo_request::{EchoRequest, EchoRequestPacket};
 use self::pnet::packet::ipv4::Ipv4Packet;
+use self::pnet::packet::ip::IpNextHeaderProtocols::{Udp, Icmp, Tcp};
 use std::net::Ipv4Addr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -40,10 +41,36 @@ pub fn get_max_ttl(packet: &IcmpResponce) -> u8 {
 /// Return the source address and the icmp echo request.
 pub fn parse_icmp(data: &Vec<u8>) -> Result<(Ipv4Addr, EchoRequest), ()> {
     if let Some(ipv4) = Ipv4Packet::new(data) {
-        if let Some(icmp) = EchoRequestPacket::new(ipv4.payload()) {
-            let icmp = icmp.from_packet();
-            // The payload is empty for icmp packets if they are not from TCP or UDP packets
-            return Ok((Ipv4Addr::from(ipv4.get_destination()), icmp));
+        if ipv4.get_next_level_protocol() == Icmp {
+            return process_icmp(ipv4.payload(), ipv4.get_destination());
+        } else if ipv4.get_next_level_protocol() == Udp {
+            
+        } else {
+        }
+    }
+    return Err(());
+}
+
+/// Return the Ipv4Addr, Identifier and Sequence Number
+fn process_icmp(payload: &[u8], destination: Ipv4Addr) -> Result<(Ipv4Addr, EchoRequest), ()> {
+    if let Some(icmp) = EchoRequestPacket::new(payload) {
+        let icmp = icmp.from_packet();
+        // If payload is not empty, then is a TCP or UDP packet that contains the id and seq
+        if icmp.payload.len() >= 2 {
+            // Use first 32 bytes as id and seq
+            let id : u16 = ((icmp.payload[0] as u16) << 8) | (icmp.payload[1] as u16);
+            let seq : u16 = ((icmp.payload[2] as u16) << 8) | (icmp.payload[3] as u16);
+            println!("Detected custom id seq ({}, {})", id, seq);
+        }
+        // The payload is empty for icmp packets if they are not from TCP or UDP packets
+        return Ok((destination, icmp));
+    }
+    return Err(());
+}
+
+fn parse_udp(data: &Vec<u8>) -> Result<(Ipv4Addr, u8, u8),()> {
+    if let Some(ipv4) = Ipv4Packet::new(data) {
+        if ipv4.get_next_level_protocol() == Udp {
         }
     }
     return Err(());

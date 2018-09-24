@@ -1,18 +1,30 @@
+// TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
+// TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
+// TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
+// TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
+// TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
+// TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
+// TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
+// TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
+// TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
+// TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
+// TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
+// TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
 extern crate ping;
 extern crate pnet;
 
-use self::ping::{PingHandler, PingHandlerBuilder, PingMethod, IcmpResponce};
+use self::ping::{IcmpResponce, PingHandler, PingHandlerBuilder, PingMethod};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::Ipv4Addr;
-use std::time::{Duration};
+use std::time::Duration;
 
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
 mod helper;
-use self::helper::{encode_id_seq,verify_packet,get_max_ttl,parse_icmp,get_ip_mask,time_from_epoch_ms};
-
+use self::helper::{encode_id_seq, get_ip_mask, get_max_ttl, parse_icmp, time_from_epoch_ms,
+                   verify_packet};
 
 #[derive(Debug)]
 struct TraceConfiguration {
@@ -65,7 +77,7 @@ impl TraceConfiguration {
 pub fn run(hitlist: &str, localip: &str, pps: u32) {
     let handler = PingHandlerBuilder::new()
         .localip(localip)
-        .method(PingMethod::UDP)
+        .method(PingMethod::ICMP)
         .rate_limit(pps)
         .build();
 
@@ -172,9 +184,9 @@ pub fn run(hitlist: &str, localip: &str, pps: u32) {
                 }
                 ping::Responce::Timeout(icmp) => {
                     // The payload contains the EchoRequest packet + 64 bytes of payload if its over UDP or TCP
-                    if let Ok((target, echo)) = parse_icmp(&icmp.payload) {
+                    if let Ok((target, echo)) = parse_icmp(&icmp.payload) { // TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
                         info!(
-                            "Received timeout from ({:?}, {:?} => {})",
+                            "Received timeout from (id: {:?}, seq: {:?} => target: {})",
                             echo.identifier, echo.sequence_number, target
                         );
                         // Verify the packet
@@ -193,7 +205,10 @@ pub fn run(hitlist: &str, localip: &str, pps: u32) {
                                 if seen.contains(&packet.source) {
                                     // Only skip if the last hop is not the same ip address, as some use the same router for more than one hop
                                     let mut skip = false;
-                                    if let Some(Some(upper)) = trace.traces.get(((echo.sequence_number as u8) as usize) + 1 - 1) {
+                                    if let Some(Some(upper)) = trace
+                                        .traces
+                                        .get(((echo.sequence_number as u8) as usize) + 1 - 1)
+                                    {
                                         if upper.router == packet.source {
                                             skip = true;
                                         }
@@ -227,10 +242,49 @@ pub fn run(hitlist: &str, localip: &str, pps: u32) {
                         }
                     }
                 }
-                ping::Responce::Unreachable(_icmp) => {
-                    // This is received from the UDP ping. the payload contains the inner icmp request without the payload
+                ping::Responce::Unreachable(icmp) => {
+                    // This is received from the UDP ping. the payload contains the inner UDP request and first two bytes of payload
                     // TODO: verify the packet without the signature to calculate the latency
-                    process_new_entry(&packet, &mut mapping, &mut check, &handler);
+                    debug!(
+                        "Unreachable from {}, {:?}",
+                        packet.source,
+                        parse_icmp(&icmp.payload)
+                    );
+                    let ip = get_ip_mask(packet.source);
+                    if mapping.contains_key(&ip) {
+                        info!(
+                            "Network {}/24 already seen ({}) (ttl: {}, dist: {})",
+                            Ipv4Addr::from(ip),
+                            packet.source,
+                            packet.ttl,
+                            get_max_ttl(&packet)
+                        );
+                        info!("{:?}", icmp.payload);
+                        if let Ok((_, icmp)) = parse_icmp(&icmp.payload) {
+                            // Use the last two bytes as id and seq
+                            if icmp.payload.len() >= 2 {
+                                if verify_packet(
+                                    packet.source,
+                                    (icmp.payload[0] as u16),
+                                    icmp.payload[1] as u16,
+                                ) {
+                                    update_trace_entry(
+                                        &mut mapping,
+                                        packet.source,
+                                        packet.source,
+                                        icmp.sequence_number as u8,
+                                        packet.time_ms,
+                                    );
+                                } else {
+                                    error!("Error verifying unreachable packet from {}", packet.source);
+                                }
+                            }
+                        } else {
+                            error!("Error parsing Unreachable from {}", packet.source);
+                        }
+                    } else {
+                        process_new_entry(&packet, &mut mapping, &mut check, &handler);
+                    }
                 }
                 ping::Responce::LocalSendedEcho(target) => {
                     // Receive the locally written packets, and store the timestamp.
@@ -247,33 +301,30 @@ pub fn run(hitlist: &str, localip: &str, pps: u32) {
     }
 }
 
-fn process_new_entry(packet: &IcmpResponce, mapping: &mut HashMap<u32, TraceConfiguration>, check: &mut VecDeque<(u32, u64)>, handler: &PingHandler) {
-    let ip = u32::from(packet.source) & 0xFFFFFF00;
-    if !mapping.contains_key(&ip) {
-        // New network, send the traceroute packets. There is no need to verify as
-        // We dont store the information of this packet.
-        info!("New Network {}/24, ttl: {}", Ipv4Addr::from(ip), packet.ttl);
-        mapping.insert(
-            ip,
-            TraceConfiguration::new(packet.source, get_max_ttl(&packet)),
-        );
+/// Add a new entry to the mapping table and send the first ping packet
+/// You MUST verify that the ip is not in the mapping before calling this function, or it will override other calls
+fn process_new_entry(
+    packet: &IcmpResponce,
+    mapping: &mut HashMap<u32, TraceConfiguration>,
+    check: &mut VecDeque<(u32, u64)>,
+    handler: &PingHandler,
+) {
+    let ip = get_ip_mask(packet.source);
+    // New network, send the traceroute packets. There is no need to verify as
+    // We dont store the information of this packet.
+    info!("New Network {}/24, ttl: {}", Ipv4Addr::from(ip), packet.ttl);
+    mapping.insert(
+        ip,
+        TraceConfiguration::new(packet.source, get_max_ttl(&packet)),
+    );
 
-        // Send the max ttl and add it to the queue
-        let ttl = get_max_ttl(&packet);
-        let (identifier, sequence) = encode_id_seq(ip, ttl);
-        handler.writer.send_complete(
-            packet.source,
-            0,
-            0,
-            ttl as u8,
-            identifier,
-            sequence,
-        );
-        check.push_back((
-            get_ip_mask(packet.source),
-            time_from_epoch_ms() + 1 * 1000,
-        ));
-    }
+    // Send the max ttl and add it to the queue
+    let ttl = get_max_ttl(&packet);
+    let (identifier, sequence) = encode_id_seq(ip, ttl);
+    handler
+        .writer
+        .send_complete(packet.source, 0, 0, ttl as u8, identifier, sequence);
+    check.push_back((get_ip_mask(packet.source), time_from_epoch_ms() + 1 * 1000));
 }
 
 /// Update the entry with the given information
@@ -324,4 +375,3 @@ fn update_trace(
         }
     }
 }
-
