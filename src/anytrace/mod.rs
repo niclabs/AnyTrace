@@ -1,17 +1,9 @@
-// TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
-// TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
-// TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
-// TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
-// TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
-// TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
-// TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
-// TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
-// TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
-// TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
-// TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
-// TODO: Change parse_icmp to just return the source, id and seq, so we can reuse it in icmp, tcp and udp
 extern crate ping;
 extern crate pnet;
+
+use self::pnet::packet::icmp::echo_reply::EchoReply;
+use self::pnet::packet::icmp::time_exceeded::TimeExceeded;
+use self::pnet::packet::icmp::destination_unreachable::DestinationUnreachable;
 
 use self::ping::{IcmpResponce, PingHandler, PingHandlerBuilder, PingMethod};
 use std::collections::hash_map::Entry;
@@ -152,135 +144,13 @@ pub fn run(hitlist: &str, localip: &str, pps: u32) {
         {
             match &packet.icmp {
                 ping::Responce::Echo(icmp) => {
-                    // Check if this is a new IP Address, only using his /24
-                    let ip = u32::from(packet.source) & 0xFFFFFF00;
-                    if mapping.contains_key(&ip) {
-                        info!(
-                            "Network {}/24 already seen ({}) (ttl: {}, dist: {})",
-                            Ipv4Addr::from(ip),
-                            packet.source,
-                            packet.ttl,
-                            get_max_ttl(&packet)
-                        );
-                        if let Ok(_) = PingHandler::verify_signature(&icmp.payload) {
-                            if verify_packet(packet.source, icmp.identifier, icmp.sequence_number) {
-                                // TODO (Optional): use the packet time instead of the calculated for better accuracy
-                                update_trace_entry(
-                                    &mut mapping,
-                                    packet.source,
-                                    packet.source,
-                                    icmp.sequence_number as u8,
-                                    packet.time_ms,
-                                );
-                            } else {
-                                error!("Error verifying packet from {}", packet.source);
-                            }
-                        } else {
-                            error!("Error verifying signature");
-                        }
-                    } else {
-                        process_new_entry(&packet, &mut mapping, &mut check, &handler);
-                    }
+                    process_echo_responce(&handler, &mut mapping, &mut check, &packet, &icmp);
                 }
                 ping::Responce::Timeout(icmp) => {
-                    info!("Received timeout from ({})", packet.source);
-                    // The payload contains the EchoRequest packet + 64 bytes of payload if its over UDP or TCP
-                    if let Ok((target, id, seq)) = parse_icmp(&icmp.payload) {
-                        info!(
-                            "Received timeout from (id: {:?}, seq: {:?} => target: {})",
-                            id, seq, target
-                        );
-                        // Verify the packet
-                        if verify_packet(target, id, seq) {
-                            let mut founded = false;
-                            if let Some(trace) = mapping.get_mut(&get_ip_mask(target)) {
-                                founded = true;
-                                update_trace(
-                                    trace,
-                                    target,
-                                    packet.source,
-                                    seq as u8,
-                                    packet.time_ms,
-                                );
-                                // Check if ip was already seen, and mark as done if the route has already been processed
-                                if seen.contains(&packet.source) {
-                                    // Only skip if the last hop is not the same ip address, as some use the same router for more than one hop
-                                    let mut skip = false;
-                                    if let Some(Some(upper)) =
-                                        trace.traces.get(((seq as u8) as usize) + 1 - 1)
-                                    {
-                                        if upper.router == packet.source {
-                                            skip = true;
-                                        }
-                                    }
-                                    if !skip {
-                                        debug!(
-                                            "Already seen router timeout, skipping {}",
-                                            packet.source
-                                        );
-                                        trace.current_ttl = 0;
-                                    }
-                                    continue;
-                                }
-
-                                // Add the router to the seen table, so we dont process it again
-                                seen.insert(packet.source);
-                            }
-                            if founded {
-                                // Mark the /24 of the router in the table, so we don't start new traces to the target
-                                let netsrc = u32::from(packet.source) & 0xFFFFFF00;
-                                match mapping.entry(netsrc) {
-                                    Entry::Vacant(v) => {
-                                        v.insert(TraceConfiguration::new(packet.source, 0));
-                                    }
-                                    Entry::Occupied(mut trace) => {
-                                        // The router is already in the map, mark the trace as done
-                                        trace.get_mut().current_ttl = 0;
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    process_timeout(&handler, &mut mapping, &mut check, &mut seen, &packet, &icmp);
                 }
                 ping::Responce::Unreachable(icmp) => {
-                    // This is received from the UDP ping. the payload contains the inner UDP request and first two bytes of payload
-                    // TODO: verify the packet without the signature to calculate the latency
-                    debug!(
-                        "Unreachable from {}, {:?}",
-                        packet.source,
-                        parse_icmp(&icmp.payload)
-                    );
-                    let ip = get_ip_mask(packet.source);
-                    if mapping.contains_key(&ip) {
-                        info!(
-                            "Network {}/24 already seen ({}) (ttl: {}, dist: {})",
-                            Ipv4Addr::from(ip),
-                            packet.source,
-                            packet.ttl,
-                            get_max_ttl(&packet)
-                        );
-
-                        if let Ok((_, id, seq)) = parse_icmp(&icmp.payload) {
-                            // Use the last two bytes as id and seq
-                            if icmp.payload.len() >= 2 {
-                                if verify_packet(packet.source, id, seq) {
-                                    update_trace_entry(
-                                        &mut mapping,
-                                        packet.source,
-                                        packet.source,
-                                        seq as u8,
-                                        packet.time_ms,
-                                    );
-                                } else {
-                                    //error!("Error verifying unreachable packet from {}", packet.source);
-                                }
-                            }
-                        } else {
-                            error!("Error parsing Unreachable from {}", packet.source);
-                        }
-                    } else {
-                        process_new_entry(&packet, &mut mapping, &mut check, &handler);
-                    }
+                    process_unreachable(&handler, &mut mapping, &mut check, &packet, &icmp);
                 }
                 ping::Responce::LocalSendedEcho(target) => {
                     // Receive the locally written packets, and store the timestamp.
@@ -294,6 +164,141 @@ pub fn run(hitlist: &str, localip: &str, pps: u32) {
                 }
             }
         }
+    }
+}
+
+/// Process an ICMP echo responce
+fn process_echo_responce(handler: &PingHandler, mapping: &mut HashMap<u32, TraceConfiguration>, check: &mut VecDeque<(u32, u64)>, packet: &IcmpResponce, icmp: &EchoReply) {
+    // Check if this is a new IP Address, only using his /24
+    let ip = u32::from(packet.source) & 0xFFFFFF00;
+    if mapping.contains_key(&ip) {
+        info!(
+            "Network {}/24 already seen ({}) (ttl: {}, dist: {})",
+            Ipv4Addr::from(ip),
+            packet.source,
+            packet.ttl,
+            get_max_ttl(&packet)
+        );
+        if let Ok(_) = PingHandler::verify_signature(&icmp.payload) {
+            if verify_packet(packet.source, icmp.identifier, icmp.sequence_number) {
+                // TODO (Optional): use the packet time instead of the calculated for better accuracy
+                update_trace_entry(
+                    mapping,
+                    packet.source,
+                    packet.source,
+                    icmp.sequence_number as u8,
+                    packet.time_ms,
+                );
+            } else {
+                error!("Error verifying packet from {}", packet.source);
+            }
+        } else {
+            error!("Error verifying signature");
+        }
+    } else {
+        process_new_entry(&packet, mapping, check, &handler);
+    }
+}
+
+fn process_timeout(handler: &PingHandler, mapping: &mut HashMap<u32, TraceConfiguration>, check: &mut VecDeque<(u32, u64)>, seen: &mut HashSet<Ipv4Addr>, packet: &IcmpResponce, icmp: &TimeExceeded) {
+    info!("Received timeout from ({})", packet.source);
+    // The payload contains the EchoRequest packet + 64 bytes of payload if its over UDP or TCP
+    if let Ok((target, id, seq)) = parse_icmp(&icmp.payload) {
+        info!(
+            "Received timeout from (id: {:?}, seq: {:?} => target: {})",
+            id, seq, target
+        );
+        // Verify the packet
+        if verify_packet(target, id, seq) {
+            let mut founded = false;
+            if let Some(trace) = mapping.get_mut(&get_ip_mask(target)) {
+                founded = true;
+                update_trace(
+                    trace,
+                    target,
+                    packet.source,
+                    seq as u8,
+                    packet.time_ms,
+                );
+                // Check if ip was already seen, and mark as done if the route has already been processed
+                if seen.contains(&packet.source) {
+                    // Only skip if the last hop is not the same ip address, as some use the same router for more than one hop
+                    let mut skip = false;
+                    if let Some(Some(upper)) =
+                        trace.traces.get(((seq as u8) as usize) + 1 - 1)
+                    {
+                        if upper.router == packet.source {
+                            skip = true;
+                        }
+                    }
+                    if !skip {
+                        debug!(
+                            "Already seen router timeout, skipping {}",
+                            packet.source
+                        );
+                        trace.current_ttl = 0;
+                    }
+                    return;
+                }
+
+                // Add the router to the seen table, so we dont process it again
+                seen.insert(packet.source);
+            }
+            if founded {
+                // Mark the /24 of the router in the table, so we don't start new traces to the target
+                let netsrc = u32::from(packet.source) & 0xFFFFFF00;
+                match mapping.entry(netsrc) {
+                    Entry::Vacant(v) => {
+                        v.insert(TraceConfiguration::new(packet.source, 0));
+                    }
+                    Entry::Occupied(mut trace) => {
+                        // The router is already in the map, mark the trace as done
+                        trace.get_mut().current_ttl = 0;
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn process_unreachable(handler: &PingHandler, mapping: &mut HashMap<u32, TraceConfiguration>, check: &mut VecDeque<(u32, u64)>, packet: &IcmpResponce, icmp: &DestinationUnreachable) {
+    // This is received from the UDP ping. the payload contains the inner UDP request and first two bytes of payload
+    // TODO: verify the packet without the signature to calculate the latency
+    debug!(
+        "Unreachable from {}, {:?}",
+        packet.source,
+        parse_icmp(&icmp.payload)
+    );
+    let ip = get_ip_mask(packet.source);
+    if mapping.contains_key(&ip) {
+        info!(
+            "Network {}/24 already seen ({}) (ttl: {}, dist: {})",
+            Ipv4Addr::from(ip),
+            packet.source,
+            packet.ttl,
+            get_max_ttl(&packet)
+        );
+
+        if let Ok((_, id, seq)) = parse_icmp(&icmp.payload) {
+            // Use the last two bytes as id and seq
+            if icmp.payload.len() >= 2 {
+                if verify_packet(packet.source, id, seq) {
+                    update_trace_entry(
+                        mapping,
+                        packet.source,
+                        packet.source,
+                        seq as u8,
+                        packet.time_ms,
+                    );
+                } else {
+                    //error!("Error verifying unreachable packet from {}", packet.source);
+                }
+            }
+        } else {
+            error!("Error parsing Unreachable from {}", packet.source);
+        }
+    } else {
+        process_new_entry(&packet, mapping, check, &handler);
     }
 }
 
