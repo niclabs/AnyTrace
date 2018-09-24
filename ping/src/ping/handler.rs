@@ -52,13 +52,13 @@ impl PingHandler {
     }
 
     pub fn verify_signature(payload: &[u8]) -> Result<(), &str> {
-        // The packet should be 10 bytes long
-        if payload.len() < 10 {
+        // The packet should be 14 bytes long
+        if payload.len() < 14 {
             return Err("Payload is not of length 10");
         }
 
         // Check the payload key
-        if payload[8..10] != *PingWriter::get_payload_key() {
+        if payload[12..14] != *PingWriter::get_payload_key() {
             return Err("Payload key invalid");
         }
         return Ok(());
@@ -67,8 +67,8 @@ impl PingHandler {
     /// Check the packet payload and get the timestamp
     pub fn get_packet_timestamp_ms(payload: &[u8]) -> Result<u64, &str> {
         // The packet should be 10 bytes long
-        if payload.len() < 10 {
-            return Err("Payload is not of length 10");
+        if payload.len() < 14 {
+            return Err("Payload is not of length 14");
         }
 
         // Get the timestamp from the payload and convert it from Big Endian
