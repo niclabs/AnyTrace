@@ -165,39 +165,37 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
 
         while let Ok(ip_received) = receiver.recv_timeout(Duration::from_millis(200)) {
             let mut vec = net_to_vector(&ip_received);
-            let mut node_match_op = networks.get_ancestor(&vec);
+            let mut first = true;
 
             loop {
+                let mut node_match_op = networks.get_ancestor(&vec);
+
                 if node_match_op.is_some() {
-                    // unwrap option value-> returns subtrie
-                    let node = return_unwrap(&node_match_op);
-                    println!("works");
-                } else {
-                    println!("also works");
-                    continue;
-                }
-                /*
-                if !node_match.is_none(){
-                        
-                    let value = node_match.unwrap().value().unwrap();
+                    let node = node_match_op.unwrap();
+                    let value = node.value().unwrap();
+                    let state = value.borrow().state.clone();
                     let network_add = value.borrow().address.clone();
-                    if value.borrow().state || !network_add.includes(&ip_received)
-                    {
-                        let len = vec.len() -1;
-                        vec.truncate(len);
-                        node_match = networks.get_ancestor(&vec);
-                        continue; 
-                    }
-                    if network_add.includes(&ip_received){
-                        value.borrow_mut().state = true;
-                        println!("{:?}", ip_received.to_s());
+                    // verify if the network matching isnt 0.0.0.0 (universe)
+                    if network_add == str_to_ip(&"0.0.0.0/0") {
                         break;
                     }
+                    if state {
+                        break;
+                    }
+                    if network_add.includes(&ip_received) {
+                        value.borrow_mut().state = true;
+                        if first {
+                            println!("{:?}", ip_received.to_s());
+                            first = false;
+                        }
+                        let len = vec.len() - 1;
+                        vec.truncate(len);
+                        continue;
+                    }
+                } else {
+                    break;
                 }
-                else{ break;}*/
             }
-            //if there is no match for the ip's prefix
-            // continue;
         }
 
         if mybreak {
@@ -206,11 +204,15 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
         // if all true break
     }
 }
-
-fn return_unwrap<'a>(op: & Option<SubTrie<'a, Vec<u8>, RefCell<network_state>>>)
- -> SubTrie<'a, Vec<u8>, RefCell<network_state>> {
-    return op.unwrap();
+/* auxiliary function for unwraping Option type without consuming self*/
+fn return_unwrap<'a>(
+    op: &'a Option<SubTrie<'a, Vec<u8>, RefCell<network_state>>>,
+) -> &'a SubTrie<'a, Vec<u8>, RefCell<network_state>> {
+    match op {
+        &Some(ref val) => val,
+        &None => panic!("called Option::unwrap() on a None value"),
     }
+}
 
 /* write_aliv_ip : &IPAdress x &PingHAndles -> Void
 sends a ping to ip adress "ip" using handler param
