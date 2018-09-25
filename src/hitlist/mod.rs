@@ -172,6 +172,7 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
 
                 if node_match_op.is_some() {
                     let node = node_match_op.unwrap();
+                    let key = node.key().unwrap();
                     let value = node.value().unwrap();
                     let state = value.borrow().state.clone();
                     let network_add = value.borrow().address.clone();
@@ -188,7 +189,8 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
                             println!("{:?}", ip_received.to_s());
                             first = false;
                         }
-                        let len = vec.len() - 1;
+                        // truncate vetor to ancestors length
+                        let len = key.len();
                         vec.truncate(len);
                         continue;
                     }

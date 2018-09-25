@@ -80,13 +80,6 @@ pub fn test_run(dummy: &str) {
     channel_runner(&mut network_hash);
 }
 
-#[derive(Debug)]
-pub struct network_state {
-    current_ip: BigUint,
-    state: bool,
-    last: bool,
-}
-
 /*returns the network mask significant bit */
 pub fn significant_bit (dummy: &str)
 {
