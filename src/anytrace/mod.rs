@@ -5,15 +5,16 @@ use self::pnet::packet::icmp::destination_unreachable::DestinationUnreachable;
 use self::pnet::packet::icmp::echo_reply::EchoReply;
 use self::pnet::packet::icmp::time_exceeded::TimeExceeded;
 
-use self::ping::{IcmpResponce, PingHandler, PingHandlerBuilder, PingMethod};
+pub use self::ping::PingMethod;
+use self::ping::{IcmpResponce, PingHandler, PingHandlerBuilder};
+
 use std;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::net::Ipv4Addr;
-use std::time::Duration;
-
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::net::Ipv4Addr;
+use std::time::Duration;
 
 mod helper;
 use self::helper::{encode_id_seq, get_ip_mask, get_max_ttl, parse_icmp, time_from_epoch_ms,
@@ -56,10 +57,10 @@ struct Anytrace {
 }
 
 impl Anytrace {
-    pub fn new(hitlist: &str, localip: &str, pps: u32) -> Anytrace {
+    pub fn new(hitlist: &str, localip: &str, pps: u32, method: PingMethod) -> Anytrace {
         let handler = PingHandlerBuilder::new()
             .localip(localip)
-            .method(PingMethod::UDP)
+            .method(method)
             .rate_limit(pps)
             .build();
         let file = File::open(hitlist).unwrap();
@@ -98,7 +99,7 @@ impl Anytrace {
         println!("original_target, measured_router, hops, ms");
         loop {
             let mut end = true;
-            for _ in 0..self.pps {
+            for _ in 0..self.pps*100 {
                 if let Some(line) = self.lines.next() {
                     if let Ok(ip) = line.unwrap().parse() {
                         let ip: Ipv4Addr = ip;
@@ -383,6 +384,6 @@ fn update_trace_conf(
     }
 }
 
-pub fn run(hitlist: &str, localip: &str, pps: u32) {
-    Anytrace::new(hitlist, localip, pps).run();
+pub fn run(hitlist: &str, localip: &str, pps: u32, method: PingMethod) {
+    Anytrace::new(hitlist, localip, pps, method).run();
 }
