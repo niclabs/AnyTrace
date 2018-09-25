@@ -159,6 +159,7 @@ impl Anytrace {
                 .reader()
                 .recv_timeout(Duration::from_millis(1_000))
             {
+                info!("from {}", packet.source);
                 match &packet.icmp {
                     ping::Responce::Echo(icmp) => {
                         self.process_echo_responce(&packet, &icmp);

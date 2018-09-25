@@ -6,6 +6,7 @@ use pnet::packet::ip::{IpNextHeaderProtocol, IpNextHeaderProtocols};
 use pnet::packet::ipv4;
 use pnet::packet::ipv4::{Ipv4Packet, MutableIpv4Packet};
 use pnet::packet::udp::MutableUdpPacket;
+use pnet::packet::tcp::{MutableTcpPacket, TcpFlags};
 use pnet::transport::TransportSender;
 
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -118,7 +119,7 @@ impl PingWriter {
         let (sender, receiver) = mpsc::channel::<PingRequest>();
         let process = match method {
             PingMethod::ICMP => Self::process_icmp,
-            PingMethod::UDP => Self::process_udp,
+            PingMethod::UDP => Self::process_tcp,
         };
         use ping::writer::ratelimit_meter::Decider;
         use std::time::Duration;
@@ -233,6 +234,60 @@ impl PingWriter {
             let mut icmp = MutableIcmpPacket::new(buffer).unwrap();
             let check = checksum(&icmp.to_immutable());
             icmp.set_checksum(check);
+        }
+    }
+
+    /// Process and send a TCP Packet
+    /// 
+    /// TODO: Handle the ack responces.
+    fn process_tcp(tx: &mut TransportSender, src: Ipv4Addr, request: &PingRequest, loopback: &mpsc::Sender<IcmpResponce>) {
+        // Buffer is [20 ipv4, 20 TCP, 14 Payload]
+        let mut buffer = [0; 20 + 20 + 14];
+
+        Self::format_tcp(&mut buffer[20..], request, src);
+        Self::format_ipv4(
+            &mut buffer,
+            IpNextHeaderProtocols::Tcp,
+            src,
+            request.target,
+            request.ttl,
+        );
+
+        match tx.send_to(
+            Ipv4Packet::new(&buffer).unwrap(),
+            IpAddr::V4(request.target),
+        ) {
+            Ok(_) => {
+                // send the packet to the loopback to store the send_time
+                let _ = loopback.send(IcmpResponce {
+                    source: src,
+                    ttl: request.ttl,
+                    icmp: Responce::LocalSendedEcho(request.target),
+                    time_ms: Self::time_from_epoch_ms(),
+                });
+            }
+            Err(e) => error!("failed to send packet to {}: {}", request.target, e),
+        };
+    }
+
+    /// Format the buffer as a TCP packet.
+    /// 
+    /// The Ack returned by the target host will be the current sequence+1
+    fn format_tcp(buffer: &mut [u8], request: &PingRequest, src: Ipv4Addr) {
+        let mut payload = [0; 14];
+        Self::set_payload(&mut payload, request.identifier, request.sequence);
+        {
+            let mut tcp = MutableTcpPacket::new(buffer).unwrap();
+            tcp.set_source(request.src_port);
+            tcp.set_destination(80);//request.dst_port);
+            tcp.set_payload(&payload);
+            tcp.set_data_offset(5 + 3);
+            tcp.set_flags(TcpFlags::SYN);
+            tcp.set_sequence(1523232);
+
+            use pnet::packet::tcp::ipv4_checksum;
+            let checksum = ipv4_checksum(&tcp.to_immutable(), &src, &request.target);
+            tcp.set_checksum(checksum);
         }
     }
 

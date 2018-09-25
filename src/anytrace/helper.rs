@@ -42,12 +42,15 @@ pub fn get_max_ttl(packet: &IcmpResponce) -> u8 {
 /// Return the source address and the icmp echo request.
 pub fn parse_icmp(data: &Vec<u8>) -> Result<(Ipv4Addr, u16, u16), ()> {
     if let Some(ipv4) = Ipv4Packet::new(data) {
-        if ipv4.get_next_level_protocol() == Icmp {
-            return process_icmp(ipv4.payload(), ipv4.get_destination());
-        } else if ipv4.get_next_level_protocol() == Udp {
-            return process_udp(ipv4.payload(), ipv4.get_destination());
-        } else {
-        }
+        return match ipv4.get_next_level_protocol() {
+            Icmp => process_icmp(ipv4.payload(), ipv4.get_destination()),
+            Udp => process_udp(ipv4.payload(), ipv4.get_destination()),
+            Tcp => {
+                println!("TCP Not handled");
+                Err(())
+            }
+            _ => Err(()),
+        };
     }
     return Err(());
 }
