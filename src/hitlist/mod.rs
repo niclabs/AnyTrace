@@ -144,7 +144,7 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
         let mut mybreak = true;
 
         for (key, value) in networks.iter() {
-            if value.borrow().state || value.borrow().last {
+            if value.borrow().last {
                 continue;
             }
             mybreak = false;
@@ -174,19 +174,18 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
                     let node = node_match_op.unwrap();
                     let key = node.key().unwrap();
                     let value = node.value().unwrap();
-                    let state = value.borrow().state.clone();
+                    //let state = value.borrow().state.clone();
                     let network_add = value.borrow().address.clone();
                     // verify if the network matching isnt 0.0.0.0 (universe)
                     if network_add == str_to_ip(&"0.0.0.0/0") {
                         break;
                     }
-                    if state {
-                        break;
-                    }
+                    //if state { break;}
                     if network_add.includes(&ip_received) {
-                        value.borrow_mut().state = true;
+                        networks.remove(&key);
+                        //value.borrow_mut().state = true;
                         if first {
-                            println!("{:?}", ip_received.to_s());
+                            println!("{}", ip_received.to_s());
                             first = false;
                         }
                         // truncate vetor to ancestors length
