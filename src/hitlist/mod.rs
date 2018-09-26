@@ -19,6 +19,7 @@ use self::pnet::packet::icmp::echo_reply::EchoReply;
 use self::pnet::packet::icmp::time_exceeded::TimeExceeded;
 use self::pnet::packet::Packet;
 use self::radix_trie::{SubTrie, Trie, TrieCommon};
+use std::borrow::Borrow;
 use std::net::Ipv4Addr;
 use std::ops::Add;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -122,7 +123,7 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
     let handler = PingHandlerBuilder::new()
         .localip("172.30.65.57")
         .method(PingMethod::ICMP)
-        .rate_limit(100)
+        .rate_limit(1000)
         .build();
 
     // channel between read/write thread
@@ -140,11 +141,13 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
     });
 
     // writer process
+    let max_pile = 1000u32;
+    let mut pile = 0u32;
     loop {
         let mut mybreak = true;
 
         for (key, value) in networks.iter() {
-            if value.borrow().last {
+            if max_pile == pile || value.borrow().last {
                 continue;
             }
             mybreak = false;
@@ -154,6 +157,7 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
             let ip = ip_network.from(&value.borrow().current_ip, &ip_network.prefix);
             let last = ip_network.last();
             write_alive_ip(&ip, &wr_handler);
+            let pile = pile + 1;
             if ip == last {
                 value.borrow_mut().last = true;
             }
@@ -164,37 +168,45 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
         // rewrite the map
 
         while let Ok(ip_received) = receiver.recv_timeout(Duration::from_millis(200)) {
+            let pile = pile.saturating_sub(1);
             let mut vec = net_to_vector(&ip_received);
             let mut first = true;
 
             loop {
-                let mut node_match_op = networks.get_ancestor(&vec);
+                let key;
+                let mut remove = false;
 
-                if node_match_op.is_some() {
-                    let node = node_match_op.unwrap();
-                    let key = node.key().unwrap();
-                    let value = node.value().unwrap();
-                    //let state = value.borrow().state.clone();
-                    let network_add = value.borrow().address.clone();
-                    // verify if the network matching isnt 0.0.0.0 (universe)
-                    if network_add == str_to_ip(&"0.0.0.0/0") {
+                {
+                    let mut node_match_op = networks.get_ancestor(&vec);
+
+                    if node_match_op.is_some() {
+                        let node = node_match_op.unwrap();
+                        key = node.key().unwrap().clone();
+                        let value = node.value().unwrap();
+                        //let state = value.borrow().state.clone();
+                        let network_add = value.borrow().address.clone();
+                        // verify if the network matching isnt 0.0.0.0 (universe)
+                        if network_add == str_to_ip(&"0.0.0.0/0") {
+                            break;
+                        }
+                        //if state { break;}
+                        if network_add.includes(&ip_received) {
+                            remove = true;
+                            //value.borrow_mut().state = true;
+                            if first {
+                                println!("{}", ip_received.to_s());
+                                first = false;
+                            }
+                            // truncate vetor to ancestors length
+                            let len = key.len();
+                            vec.truncate(len);
+                        }
+                    } else {
                         break;
                     }
-                    //if state { break;}
-                    if network_add.includes(&ip_received) {
-                        networks.remove(&key);
-                        //value.borrow_mut().state = true;
-                        if first {
-                            println!("{}", ip_received.to_s());
-                            first = false;
-                        }
-                        // truncate vetor to ancestors length
-                        let len = key.len();
-                        vec.truncate(len);
-                        continue;
-                    }
-                } else {
-                    break;
+                }
+                if remove {
+                    networks.remove(&key);
                 }
             }
         }
@@ -235,7 +247,7 @@ fn read_alive_ip(handler: &PingReader, sender: &mpsc::Sender<IPAddress>) {
         match packet.icmp {
             // response
             ping::Responce::Echo(icmp) => {
-                if let Ok(ts) = PingHandler::get_packet_timestamp_ms(&icmp.payload, true) {
+                if let Ok(ts) = PingHandler::get_packet_timestamp_ms(&icmp.payload) {
                     let ipv4source = packet.source;
                     let source: IPAddress = IPAddress::parse(format!("{:?}", ipv4source)).unwrap();
                     //sends source back to writer process

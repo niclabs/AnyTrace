@@ -4,8 +4,8 @@ extern crate getopts;
 
 use self::getopts::{Matches, Options};
 use self::std::env;
-use anytrace::anytrace::PingMethod;
 use anytrace::anytrace::run;
+use anytrace::anytrace::PingMethod;
 
 fn print_usage(program: &str, opts: Options) {
     let brief = format!("Usage: {} FILE [options]", program);
@@ -27,7 +27,12 @@ fn get_options() -> Result<Matches, ()> {
         "File containing the histlist, separated by newline",
         "data/hitlist.txt",
     );
-    opts.reqopt("m", "method", "Method used to send the ping requests. Options: ICMP, UDP", "ICMP");
+    opts.reqopt(
+        "m",
+        "method",
+        "Method used to send the ping requests. Options: ICMP, UDP",
+        "ICMP",
+    );
     opts.optflag("h", "help", "Print this help menu");
 
     let args: Vec<String> = env::args().collect();

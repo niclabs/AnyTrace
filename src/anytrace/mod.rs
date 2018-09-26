@@ -17,8 +17,9 @@ use std::net::Ipv4Addr;
 use std::time::Duration;
 
 mod helper;
-use self::helper::{encode_id_seq, get_ip_mask, get_max_ttl, parse_icmp, time_from_epoch_ms,
-                   verify_packet};
+use self::helper::{
+    encode_id_seq, get_ip_mask, get_max_ttl, parse_icmp, time_from_epoch_ms, verify_packet,
+};
 
 #[derive(Debug)]
 struct TraceConfiguration {
@@ -99,7 +100,7 @@ impl Anytrace {
         println!("original_target, measured_router, hops, ms");
         loop {
             let mut end = true;
-            for _ in 0..self.pps*100 {
+            for _ in 0..self.pps * 100 {
                 if let Some(line) = self.lines.next() {
                     if let Ok(ip) = line.unwrap().parse() {
                         let ip: Ipv4Addr = ip;
