@@ -233,6 +233,7 @@ fn read_alive_ip(handler: &PingReader, sender: &mpsc::Sender<IPAddress>) {
     // response packet
     while let Ok(packet) = handler.reader().recv() {
         match packet.icmp {
+<<<<<<< HEAD
             // response
             ping::Responce::Echo(icmp) => {
                 if let Ok(ts) = PingHandler::get_packet_timestamp_ms(&icmp.payload, true) {
@@ -243,6 +244,11 @@ fn read_alive_ip(handler: &PingReader, sender: &mpsc::Sender<IPAddress>) {
                         // burries child process
                         return;
                     }
+=======
+            ping::Responce::Echo(packet) => {
+                if let Ok(ts) = PingHandler::get_packet_timestamp_ms(&packet.payload) {
+                    println!("Parsed correctly, delta(ms): {}", time_from_epoch_ms() - ts);
+>>>>>>> 0bc6dd154fdfb2b704ea14dbc1dd4cb1bb98f457
                 }
             }
             ping::Responce::Timeout(_packet) => {
@@ -251,6 +257,7 @@ fn read_alive_ip(handler: &PingReader, sender: &mpsc::Sender<IPAddress>) {
             ping::Responce::Unreachable(_packet) => {
                 //println!("Received unreachable {}", target);
             }
+            ping::Responce::LocalSendedEcho(_) => {}
         }
     }
 }
