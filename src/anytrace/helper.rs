@@ -5,7 +5,7 @@ use self::ping::IcmpResponce;
 use self::pnet::packet::FromPacket;
 use self::pnet::packet::Packet;
 use self::pnet::packet::icmp::echo_request::EchoRequestPacket;
-use self::pnet::packet::ip::IpNextHeaderProtocols::{Icmp, Tcp, Udp};
+use self::pnet::packet::ip::IpNextHeaderProtocols::{Icmp, Udp};
 use self::pnet::packet::ipv4::Ipv4Packet;
 use self::pnet::packet::udp::UdpPacket;
 use std::net::Ipv4Addr;
