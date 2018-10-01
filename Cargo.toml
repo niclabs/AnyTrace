@@ -17,6 +17,8 @@ radix_trie = "0.1"
 getopts = "0.2"
 log = "0.4.4"
 env_logger = "0.5.13"
+ratelimit_meter = "2.0.0"
+
 
 [dependencies.pnet]
 git = "https://github.com/libpnet/libpnet/"

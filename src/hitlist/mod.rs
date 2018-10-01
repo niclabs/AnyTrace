@@ -7,6 +7,7 @@ extern crate radix_trie;
 extern crate rustc_serialize;
 extern crate serde;
 extern crate serde_json;
+extern crate ratelimit_meter;
 
 use self::ipaddress::IPAddress;
 use self::num::bigint::BigUint;
@@ -23,6 +24,7 @@ use std::borrow::Borrow;
 use std::net::Ipv4Addr;
 use std::ops::Add;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use hitlist::ratelimit_meter::Decider;
 
 use hitlist::num::ToPrimitive;
 use std::cell::RefCell;
@@ -115,15 +117,17 @@ pub fn run(dummy: &str) {
     }
     //channel_runner(&mut network_hash);
     //println!("vector ready");
+    info!("{}", network_vec.len());
     let mut trie = create_trie(&mut network_vec);
     channel_runner(&mut trie);
 }
 
 pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
+    let rate= 20000;
     let handler = PingHandlerBuilder::new()
         .localip("172.30.65.57")
         .method(PingMethod::ICMP)
-        .rate_limit(1000)
+        .rate_limit(rate)
         .build();
 
     // channel between read/write thread
@@ -141,15 +145,22 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
     });
 
     // writer process
-    let max_pile = 1000u32;
-    let mut pile = 0u32;
+    let mut ratelimit = ratelimit_meter::LeakyBucket::new(rate, Duration::from_secs(1)).unwrap();
+    //let max_pile = 1000u32;
+    //let mut pile = 0u32;
     loop {
         let mut mybreak = true;
 
         for (key, value) in networks.iter() {
-            if max_pile == pile || value.borrow().last {
+            if value.borrow().last {
                 continue;
             }
+            // todo let mut cnt= 0 cnt ++ si cnt > rate terminar
+            if let Err(_)=ratelimit.check() {
+                mybreak = false;
+                break;
+            }
+
             mybreak = false;
             let ip_network = value.borrow().address.clone();
             //reading thread created
@@ -157,7 +168,7 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
             let ip = ip_network.from(&value.borrow().current_ip, &ip_network.prefix);
             let last = ip_network.last();
             write_alive_ip(&ip, &wr_handler);
-            let pile = pile + 1;
+            //let pile = pile + 1;
             if ip == last {
                 value.borrow_mut().last = true;
             }
@@ -168,7 +179,7 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
         // rewrite the map
 
         while let Ok(ip_received) = receiver.recv_timeout(Duration::from_millis(200)) {
-            let pile = pile.saturating_sub(1);
+            //let pile = pile.saturating_sub(1);
             let mut vec = net_to_vector(&ip_received);
             let mut first = true;
 
@@ -206,6 +217,8 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
                     }
                 }
                 if remove {
+                    //todo
+                    debug!("{}trielen",networks.len());
                     networks.remove(&key);
                 }
             }
