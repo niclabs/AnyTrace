@@ -10,7 +10,24 @@ use self::pnet::packet::ipv4::Ipv4Packet;
 use self::pnet::packet::udp::UdpPacket;
 use std::net::Ipv4Addr;
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::ops::BitXor;
 
+/// Encode the ip address and the ttl into the id and sequence number, applying the given key
+/// Return the tuple (identifier, sequence_number)
+pub fn encode_id_seq_key(address: u32, ttl: u8, key: u16) -> (u16, u16) {
+    let (id, seq) = encode_id_seq(address, ttl);
+    return (id.bitxor(key), seq.bitxor(key));
+}
+
+/// Decode the id and seq to obtain the original (netowrk, ttl) tuple, applying the given key
+pub fn decode_id_seq_key(id: u16, seq: u16, key: u16) -> (u32, u8) {
+    return decode_id_seq(id.bitxor(key), seq.bitxor(key));
+}
+
+/// Decode the id and seq to obtain the original (netowrk, ttl) tuple.
+pub fn decode_id_seq(id: u16, seq: u16) -> (u32, u8) {
+    return ((id as u32) << 16 | (seq & 0xFF00) as u32, seq as u8);
+}
 /// Encode the ip address and the ttl into the id and sequence number
 /// Return the tuple (identifier, sequence_number)
 pub fn encode_id_seq(address: u32, ttl: u8) -> (u16, u16) {
@@ -20,10 +37,15 @@ pub fn encode_id_seq(address: u32, ttl: u8) -> (u16, u16) {
     return (identifier, sequence);
 }
 
+pub fn verify_packet_network(source: Ipv4Addr, network: u32) -> bool {
+    let source = get_ip_mask(source);
+    return source == network;
+}
+
 /// Verify the ICMP packet source with his identifier and sequence
 pub fn verify_packet(source: Ipv4Addr, identifier: u16, sequence: u16) -> bool {
     let network = u32::from(source) & 0xFFFFFF00;
-    let ip = ((identifier as u32) << 16) | (sequence & 0xFF00) as u32;
+    let (ip, _) = decode_id_seq(identifier, sequence);
     return network == ip;
 }
 
@@ -66,16 +88,10 @@ fn process_icmp(payload: &[u8], destination: Ipv4Addr) -> Result<(Ipv4Addr, u16,
 fn process_udp(payload: &[u8], destination: Ipv4Addr) -> Result<(Ipv4Addr, u16, u16), ()> {
     if let Some(udp) = UdpPacket::new(payload) {
         let payload = udp.payload();
-        if payload.len() >= 4 {
-            let id: u16 = ((payload[0] as u16) << 8) | (payload[1] as u16);
-            let seq: u16 = ((payload[2] as u16) << 8) | (payload[3] as u16);
-            return Ok((destination, id, seq));
-        } else {
-            // Use the stored id and seq on the source/destination port
-            let id = udp.get_source();
-            let seq = udp.get_destination();
-            return Ok((destination, id, seq));
-        }
+        // Use the stored id and seq on the source/destination port
+        let id = udp.get_source();
+        let seq = udp.get_destination();
+        return Ok((destination, id, seq));
     }
     return Err(());
 }

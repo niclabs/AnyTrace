@@ -54,7 +54,7 @@ impl PingHandler {
     pub fn verify_signature(payload: &[u8]) -> Result<(), &str> {
         // The packet should be 14 bytes long
         if payload.len() < 14 {
-            return Err("Payload is not of length 10");
+            return Err("Payload is not of length 14");
         }
 
         // Check the payload key

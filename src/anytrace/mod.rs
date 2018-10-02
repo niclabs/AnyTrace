@@ -16,8 +16,8 @@ use std::net::Ipv4Addr;
 use std::time::Duration;
 
 mod helper;
-use self::helper::{encode_id_seq, get_ip_mask, get_max_ttl, parse_icmp, time_from_epoch_ms,
-                   verify_packet};
+use self::helper::{encode_id_seq_key, get_ip_mask, get_max_ttl, parse_icmp, time_from_epoch_ms,
+                   verify_packet_network, decode_id_seq_key};
 
 #[derive(Debug)]
 struct TraceConfiguration {
@@ -54,6 +54,7 @@ struct Anytrace {
     seen: HashSet<Ipv4Addr>,
     lines: std::io::Lines<std::io::BufReader<std::fs::File>>,
     pps: u32,
+    key: u16,
 }
 
 impl Anytrace {
@@ -71,6 +72,7 @@ impl Anytrace {
             seen: HashSet::new(),
             lines: BufReader::new(file).lines(),
             pps: pps,
+            key: 0xBEEAu16,
         };
     }
 
@@ -92,9 +94,8 @@ impl Anytrace {
     ///         If not on HashMap, goto [A] (This mean the packet is not verified, or came from
     ///             an invalid ip while sending the data)
     ///
-    /// Packet format: id: first 16 bits of the dst ip, seq: u8 of the dst ip, u8 ttl
+    /// Packet format: id: first 16 bits of the dst ip, seq: (u8 of the dst ip, u8 ttl)
     /// Output to stdin (csv): original_target, measured_router, hops, ms
-    /// TODO: Add random offset/xor as a key of the packets, so we can differentiate which packets are ours and which are not
     pub fn run(&mut self) {
         println!("original_target, measured_router, hops, ms");
         loop {
@@ -139,7 +140,7 @@ impl Anytrace {
                         trace.current_ttl = trace.current_ttl.saturating_sub(1);
                         if trace.current_ttl >= 1 {
                             // Send the next packet
-                            let (identifier, sequence) = encode_id_seq(ip, trace.current_ttl);
+                            let (identifier, sequence) = encode_id_seq_key(ip, trace.current_ttl, self.key);
                             self.handler.writer.send_complete(
                                 trace.source,
                                 identifier,
@@ -205,7 +206,7 @@ impl Anytrace {
     /// Process an ICMP echo responce
     fn process_echo_responce(&mut self, packet: &IcmpResponce, icmp: &EchoReply) -> Result<(),()> {
         // Check if this is a new IP Address, only using his /24
-        let ip = u32::from(packet.source) & 0xFFFFFF00;
+        let ip = get_ip_mask(packet.source);
         if self.mapping.contains_key(&ip) {
             info!(
                 "Network {}/24 already seen ({}) (ttl: {}, dist: {})",
@@ -215,12 +216,13 @@ impl Anytrace {
                 get_max_ttl(&packet)
             );
             if let Ok(_) = PingHandler::verify_signature(&icmp.payload) {
-                if verify_packet(packet.source, icmp.identifier, icmp.sequence_number) {
+                let (network, ttl) = decode_id_seq_key(icmp.identifier, icmp.sequence_number, self.key);
+                if verify_packet_network(packet.source, network) {
                     // TODO (Optional): use the packet time instead of the calculated for better accuracy
                     return self.update_trace_entry(
                         packet.source,
                         packet.source,
-                        icmp.sequence_number as u8,
+                        ttl,
                         packet.time_ms,
                     );
                 } else {
@@ -247,11 +249,12 @@ impl Anytrace {
                 id, seq, target
             );
             // Verify the packet
-            if verify_packet(target, id, seq) {
+            let (network, ttl) = decode_id_seq_key(id, seq, self.key);
+            if verify_packet_network(target, network) {
                 let mut founded = false;
                 if let Some(trace) = self.mapping.get_mut(&get_ip_mask(target)) {
                     founded = true;
-                    if let Ok(_) = update_trace_conf(trace, target, packet.source, seq as u8, packet.time_ms) {
+                    if let Ok(_) = update_trace_conf(trace, target, packet.source, ttl, packet.time_ms) {
                         // If the router is market as done, we don't need to check for skips
                         if trace.current_ttl == 0 {
                             return Ok(());
@@ -261,7 +264,7 @@ impl Anytrace {
                         if self.seen.contains(&packet.source) {
                             // Only skip if the last hop is not the same ip address, as some use the same router for more than one hop
                             let mut skip = true;
-                            if let Some(Some(upper)) = trace.traces.get(((seq as u8) as usize) + 1 - 1)
+                            if let Some(Some(upper)) = trace.traces.get((ttl as usize) + 1 - 1)
                             {
                                 if upper.router == packet.source {
                                     skip = false;
@@ -315,15 +318,16 @@ impl Anytrace {
             );
 
             if let Ok((_, id, seq)) = parse_icmp(&icmp.payload) {
-                if verify_packet(packet.source, id, seq) {
+                let (network, ttl) = decode_id_seq_key(id, seq, self.key);
+                if verify_packet_network(packet.source, network) {
                     return self.update_trace_entry(
                         packet.source,
                         packet.source,
-                        seq as u8,
+                        ttl,
                         packet.time_ms,
                     );
                 } else {
-                    error!("Error verifying from {} {} {}", packet.source, id, seq);
+                    error!("Error verifying from {}, received0 {}/24", packet.source, Ipv4Addr::from(network));
                 }
             } else {
                 error!("Error parsing Unreachable from {}", packet.source);
@@ -360,10 +364,10 @@ impl Anytrace {
 
         // Send the max ttl and add it to the queue
         let ttl = get_max_ttl(&packet);
-        let (identifier, sequence) = encode_id_seq(ip, ttl);
+        let (identifier, sequence) = encode_id_seq_key(ip, ttl, self.key);
         self.handler
             .writer
-            .send_complete(packet.source, 0, 0, ttl as u8, identifier, sequence);
+            .send_complete(packet.source, identifier, sequence, ttl, identifier, sequence);
         self.check
             .push_back((get_ip_mask(packet.source), time_from_epoch_ms() + 1 * 1000));
         return Ok(());
@@ -377,7 +381,7 @@ impl Anytrace {
         ttl: u8,
         time_ms: u64,
     ) -> Result<(), ()>{
-        let source_net = u32::from(original_target) & 0xFFFFFF00;
+        let source_net = get_ip_mask(original_target);
         if let Some(trace) = self.mapping.get_mut(&source_net) {
             return update_trace_conf(trace, original_target, packet_source, ttl, time_ms);
         }
