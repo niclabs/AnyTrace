@@ -32,6 +32,7 @@ struct Trace {
     router: Ipv4Addr,
     hops: u8,
     ms: u64,
+    done: bool,
 }
 
 impl TraceConfiguration {
@@ -384,21 +385,29 @@ fn update_trace_conf(
     // Unless it is a router/middlebox, where we dont store the values.
     if let Some(trace) = traceconf.traces.get_mut(index as usize) {
         if let Some(measurement) = trace {
-            // We have already setted the value before, calculate the time difference
-            measurement.ms = u64::max(measurement.ms, time_ms) - u64::min(measurement.ms, time_ms);
+            if !measurement.done {
+                // We have already setted the value before, calculate the time difference
+                measurement.ms = u64::max(measurement.ms, time_ms) - u64::min(measurement.ms, time_ms);
 
-            if measurement.router.is_unspecified() {
-                measurement.router = packet_source;
+                if measurement.router.is_unspecified() {
+                    measurement.router = packet_source;
+                }
+                println!(
+                    "{}, {}, {}, {}",
+                    original_target, measurement.router, measurement.hops, measurement.ms
+                );
+
+                // Mark the measurement as done, to prevent duplicated answers.
+                measurement.done = true;
+            } else {
+                error!("Duplicated answer from origin_target: {}, router: {}", original_target, measurement.router);
             }
-            println!(
-                "{}, {}, {}, {}",
-                original_target, measurement.router, measurement.hops, measurement.ms
-            );
         } else {
             *trace = Some(Trace {
                 router: packet_source,
                 hops: ttl,
                 ms: time_ms,
+                done: false,
             });
         }
     }
