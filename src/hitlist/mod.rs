@@ -56,7 +56,7 @@ and its state -> alive/not found yet
 pub struct network_state {
     address: IPAddress,
     current_ip: BigUint,
-    state: bool,
+    //state: bool,
     last: bool,
 }
 
@@ -123,7 +123,7 @@ pub fn run(dummy: &str) {
 }
 
 pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
-    let rate= 20000;
+    let rate= 10000;
     let handler = PingHandlerBuilder::new()
         .localip("172.30.65.57")
         .method(PingMethod::ICMP)
@@ -180,7 +180,7 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
 
         while let Ok(ip_received) = receiver.recv_timeout(Duration::from_millis(200)) {
             //let pile = pile.saturating_sub(1);
-            let mut vec = net_to_vector(&ip_received);
+            let vec = net_to_vector(&ip_received);
             let mut first = true;
 
             loop {
@@ -198,6 +198,8 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
                         let network_add = value.borrow().address.clone();
                         // verify if the network matching isnt 0.0.0.0 (universe)
                         if network_add == str_to_ip(&"0.0.0.0/0") {
+                            //remove 0.0.0.0
+                            remove= true;
                             break;
                         }
                         //if state { break;}
@@ -208,9 +210,9 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
                                 println!("{}", ip_received.to_s());
                                 first = false;
                             }
-                            // truncate vetor to ancestors length
+                            // truncate vector to ancestors length
                             let len = key.len();
-                            vec.truncate(len);
+                            //vec.truncate(len);
                         }
                     } else {
                         break;
