@@ -56,7 +56,6 @@ and its state -> alive/not found yet
 pub struct network_state {
     address: IPAddress,
     current_ip: BigUint,
-    //state: bool,
     last: bool,
 }
 
@@ -93,7 +92,6 @@ pub fn create_trie(vec: &mut Vec<String>) -> Trie<Vec<u8>, RefCell<network_state
             RefCell::new(network_state {
                 address: ip_net,
                 current_ip: host_address,
-                state: false,
                 last: false,
             }),
         );
@@ -115,8 +113,6 @@ pub fn run(dummy: &str) {
         let mut vec = value;
         network_vec.append(&mut vec);
     }
-    //channel_runner(&mut network_hash);
-    //println!("vector ready");
     info!("{}", network_vec.len());
     let mut trie = create_trie(&mut network_vec);
     channel_runner(&mut trie);
@@ -205,14 +201,12 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
                         //if state { break;}
                         if network_add.includes(&ip_received) {
                             remove = true;
-                            //value.borrow_mut().state = true;
                             if first {
                                 println!("{}", ip_received.to_s());
                                 first = false;
                             }
                             // truncate vector to ancestors length
                             let len = key.len();
-                            //vec.truncate(len);
                         }
                     } else {
                         break;
