@@ -158,6 +158,7 @@ impl Anytrace {
 
                     let ttl = self.mapping.get(&ip).unwrap().current_ttl;
                     if ttl == 0 {
+                        debug!("Removing {} from mapping", ip);
                         self.mapping.remove(&ip);
                         continue;
                     }
@@ -245,6 +246,9 @@ impl Anytrace {
                     decode_id_seq_key(icmp.identifier, icmp.sequence_number, self.key);
                 if verify_packet_network(packet.source, network) {
                     // TODO (Optional): use the packet time instead of the calculated for better accuracy
+                    // Mark the router as measured and update the trace
+                    self.seen.insert(packet.source);
+                    self.seen.insert(Ipv4Addr::from(get_ip_mask(packet.source) | 0xff));
                     return self.update_trace_entry(
                         packet.source,
                         packet.source,
@@ -359,7 +363,7 @@ impl Anytrace {
                     );
                 } else {
                     error!(
-                        "Error verifying from {}, received0 {}/24",
+                        "Error verifying from {}, received {}/24",
                         packet.source,
                         Ipv4Addr::from(network)
                     );
@@ -455,10 +459,11 @@ fn update_trace_conf(
                 if measurement.router.is_unspecified() {
                     measurement.router = packet_source;
                 }
-                println!(
-                    "{}, {}, {}, {}",
-                    original_target, measurement.router, measurement.hops, measurement.ms
-                );
+                //println!(
+                //    "{}, {}, {}, {}",
+                //    original_target, measurement.router, measurement.hops, measurement.ms
+                //);
+                println!("{}, {}, {}, {}", original_target, packet_source, ttl, time_ms);
 
                 // Mark the measurement as done, to prevent duplicated answers.
                 measurement.done = true;
@@ -470,6 +475,7 @@ fn update_trace_conf(
                 );
             }
         } else {
+            println!("{}, {}, {}, {}", original_target, packet_source, ttl, time_ms);
             *trace = Some(Trace {
                 router: packet_source,
                 hops: ttl,
