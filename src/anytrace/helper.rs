@@ -9,8 +9,8 @@ use self::pnet::packet::ip::IpNextHeaderProtocols::{Icmp, Udp};
 use self::pnet::packet::ipv4::Ipv4Packet;
 use self::pnet::packet::udp::UdpPacket;
 use std::net::Ipv4Addr;
-use std::time::{SystemTime, UNIX_EPOCH};
 use std::ops::BitXor;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Encode the ip address and the ttl into the id and sequence number, applying the given key
 /// Return the tuple (identifier, sequence_number)

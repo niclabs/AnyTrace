@@ -13,11 +13,11 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::net::Ipv4Addr;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 mod helper;
-use self::helper::{encode_id_seq_key, get_ip_mask, get_max_ttl, parse_icmp, time_from_epoch_ms,
-                   verify_packet_network, decode_id_seq_key};
+use self::helper::{decode_id_seq_key, encode_id_seq_key, get_ip_mask, get_max_ttl, parse_icmp,
+                   time_from_epoch_ms, verify_packet_network};
 
 #[derive(Debug)]
 struct TraceConfiguration {
@@ -52,27 +52,46 @@ struct Anytrace {
     mapping: HashMap<u32, TraceConfiguration>,
     check: VecDeque<(u32, u64)>,
     seen: HashSet<Ipv4Addr>,
-    lines: std::io::Lines<std::io::BufReader<std::fs::File>>,
+    lines: Option<std::io::Lines<std::io::BufReader<std::fs::File>>>,
     pps: u32,
     key: u16,
+
+    master: bool,
+    starttime: Instant,
+    runtime: Duration,
 }
 
 impl Anytrace {
-    pub fn new(hitlist: &str, localip: &str, pps: u32, method: PingMethod) -> Anytrace {
+    pub fn new(
+        hitlist: Option<String>,
+        localip: &str,
+        pps: u32,
+        method: PingMethod,
+        master: bool,
+        runtime: Duration,
+    ) -> Anytrace {
         let handler = PingHandlerBuilder::new()
             .localip(localip)
             .method(method)
             .rate_limit(pps)
             .build();
-        let file = File::open(hitlist).unwrap();
+        let file = match hitlist {
+            Some(hitlist) => Some(BufReader::new(File::open(hitlist).unwrap()).lines()),
+            _ => None,
+        };
+
         return Anytrace {
             handler: handler,
             mapping: HashMap::new(),
             check: VecDeque::new(),
             seen: HashSet::new(),
-            lines: BufReader::new(file).lines(),
+            lines: file,
             pps: pps,
             key: 0xBEEAu16,
+
+            master: master,
+            starttime: Instant::now(),
+            runtime: runtime,
         };
     }
 
@@ -101,23 +120,31 @@ impl Anytrace {
         loop {
             if self.check.len() < self.pps as usize * 5usize {
                 let mut end = true;
-                for _ in 0..self.pps*5 {
-                    if let Some(line) = self.lines.next() {
-                        if let Ok(ip) = line.unwrap().parse() {
-                            let ip: Ipv4Addr = ip;
-                            if !self.seen.contains(&Ipv4Addr::from(get_ip_mask(ip) | 0xFF)) {
-                                // We don't store the information, as this packet only verifies if
-                                // the host is online, and not execute the tracerote
-                                self.handler.writer.send(ip);
-                                end = false;
+                if self.master {
+                    if let Some(ref mut lines) = self.lines {
+                        for _ in 0..self.pps * 5 {
+                            if let Some(line) = lines.next() {
+                                if let Ok(ip) = line.unwrap().parse() {
+                                    let ip: Ipv4Addr = ip;
+                                    if !self.seen.contains(&Ipv4Addr::from(get_ip_mask(ip) | 0xFF))
+                                    {
+                                        // We don't store the information, as this packet only verifies if
+                                        // the host is online, and not execute the tracerote
+                                        self.handler.writer.send(ip);
+                                        end = false;
+                                    }
+                                }
+                            } else {
+                                break;
                             }
                         }
-                    } else {
-                        break;
                     }
                 }
                 if end && self.check.is_empty() {
-                    break;
+                    // Only end if its master, or the slave has a given runtime
+                    if self.master || self.starttime + self.runtime < Instant::now() {
+                        break;
+                    }
                 }
             }
 
@@ -140,7 +167,8 @@ impl Anytrace {
                         trace.current_ttl = trace.current_ttl.saturating_sub(1);
                         if trace.current_ttl >= 1 {
                             // Send the next packet
-                            let (identifier, sequence) = encode_id_seq_key(ip, trace.current_ttl, self.key);
+                            let (identifier, sequence) =
+                                encode_id_seq_key(ip, trace.current_ttl, self.key);
                             self.handler.writer.send_complete(
                                 trace.source,
                                 identifier,
@@ -168,18 +196,12 @@ impl Anytrace {
             while let Ok(packet) = self.handler
                 .reader
                 .reader()
-                .recv_timeout(Duration::from_millis(200))
+                .recv_timeout(Duration::from_millis(100))
             {
                 let result = match &packet.icmp {
-                    ping::Responce::Echo(icmp) => {
-                        self.process_echo_responce(&packet, &icmp)
-                    }
-                    ping::Responce::Timeout(icmp) => {
-                        self.process_timeout(&packet, &icmp)
-                    }
-                    ping::Responce::Unreachable(icmp) => {
-                        self.process_unreachable(&packet, &icmp)
-                    }
+                    ping::Responce::Echo(icmp) => self.process_echo_responce(&packet, &icmp),
+                    ping::Responce::Timeout(icmp) => self.process_timeout(&packet, &icmp),
+                    ping::Responce::Unreachable(icmp) => self.process_unreachable(&packet, &icmp),
                     ping::Responce::LocalSendedEcho(target) => {
                         // Receive the locally written packets, and store the timestamp.
                         self.update_trace_entry(
@@ -195,8 +217,11 @@ impl Anytrace {
                     last_update = time_from_epoch_ms();
                 } else {
                     // We only loop for a max of 2 seconds after the last usable packet
-                    if Duration::from_secs(2) > Duration::from_millis(time_from_epoch_ms()) - Duration::from_millis(last_update) {
-                        //break;
+                    if Duration::from_secs(2)
+                        < Duration::from_millis(time_from_epoch_ms())
+                            - Duration::from_millis(last_update)
+                    {
+                        break;
                     }
                 }
             }
@@ -204,7 +229,7 @@ impl Anytrace {
     }
 
     /// Process an ICMP echo responce
-    fn process_echo_responce(&mut self, packet: &IcmpResponce, icmp: &EchoReply) -> Result<(),()> {
+    fn process_echo_responce(&mut self, packet: &IcmpResponce, icmp: &EchoReply) -> Result<(), ()> {
         // Check if this is a new IP Address, only using his /24
         let ip = get_ip_mask(packet.source);
         if self.mapping.contains_key(&ip) {
@@ -216,7 +241,8 @@ impl Anytrace {
                 get_max_ttl(&packet)
             );
             if let Ok(_) = PingHandler::verify_signature(&icmp.payload) {
-                let (network, ttl) = decode_id_seq_key(icmp.identifier, icmp.sequence_number, self.key);
+                let (network, ttl) =
+                    decode_id_seq_key(icmp.identifier, icmp.sequence_number, self.key);
                 if verify_packet_network(packet.source, network) {
                     // TODO (Optional): use the packet time instead of the calculated for better accuracy
                     return self.update_trace_entry(
@@ -254,7 +280,9 @@ impl Anytrace {
                 let mut founded = false;
                 if let Some(trace) = self.mapping.get_mut(&get_ip_mask(target)) {
                     founded = true;
-                    if let Ok(_) = update_trace_conf(trace, target, packet.source, ttl, packet.time_ms) {
+                    if let Ok(_) =
+                        update_trace_conf(trace, target, packet.source, ttl, packet.time_ms)
+                    {
                         // If the router is market as done, we don't need to check for skips
                         if trace.current_ttl == 0 {
                             return Ok(());
@@ -264,8 +292,7 @@ impl Anytrace {
                         if self.seen.contains(&packet.source) {
                             // Only skip if the last hop is not the same ip address, as some use the same router for more than one hop
                             let mut skip = true;
-                            if let Some(Some(upper)) = trace.traces.get((ttl as usize) + 1 - 1)
-                            {
+                            if let Some(Some(upper)) = trace.traces.get((ttl as usize) + 1 - 1) {
                                 if upper.router == packet.source {
                                     skip = false;
                                 }
@@ -299,7 +326,11 @@ impl Anytrace {
         return Err(());
     }
 
-    fn process_unreachable(&mut self, packet: &IcmpResponce, icmp: &DestinationUnreachable) -> Result<(), ()> {
+    fn process_unreachable(
+        &mut self,
+        packet: &IcmpResponce,
+        icmp: &DestinationUnreachable,
+    ) -> Result<(), ()> {
         // This is received from the UDP ping. the payload contains the inner UDP request and first two bytes of payload
         // TODO: verify the packet without the signature to calculate the latency
         debug!(
@@ -327,7 +358,11 @@ impl Anytrace {
                         packet.time_ms,
                     );
                 } else {
-                    error!("Error verifying from {}, received0 {}/24", packet.source, Ipv4Addr::from(network));
+                    error!(
+                        "Error verifying from {}, received0 {}/24",
+                        packet.source,
+                        Ipv4Addr::from(network)
+                    );
                 }
             } else {
                 error!("Error parsing Unreachable from {}", packet.source);
@@ -347,7 +382,10 @@ impl Anytrace {
 
         // If we have seen the network, discard it
         if self.seen.contains(&Ipv4Addr::from(ip | 0xff)) {
-            debug!("New network {}/24 already seen, not processing", Ipv4Addr::from(ip));
+            debug!(
+                "New network {}/24 already seen, not processing",
+                Ipv4Addr::from(ip)
+            );
             return Err(());
         }
 
@@ -365,9 +403,14 @@ impl Anytrace {
         // Send the max ttl and add it to the queue
         let ttl = get_max_ttl(&packet);
         let (identifier, sequence) = encode_id_seq_key(ip, ttl, self.key);
-        self.handler
-            .writer
-            .send_complete(packet.source, identifier, sequence, ttl, identifier, sequence);
+        self.handler.writer.send_complete(
+            packet.source,
+            identifier,
+            sequence,
+            ttl,
+            identifier,
+            sequence,
+        );
         self.check
             .push_back((get_ip_mask(packet.source), time_from_epoch_ms() + 1 * 1000));
         return Ok(());
@@ -380,7 +423,7 @@ impl Anytrace {
         packet_source: Ipv4Addr,
         ttl: u8,
         time_ms: u64,
-    ) -> Result<(), ()>{
+    ) -> Result<(), ()> {
         let source_net = get_ip_mask(original_target);
         if let Some(trace) = self.mapping.get_mut(&source_net) {
             return update_trace_conf(trace, original_target, packet_source, ttl, time_ms);
@@ -396,7 +439,7 @@ fn update_trace_conf(
     packet_source: Ipv4Addr,
     ttl: u8,
     time_ms: u64,
-) -> Result <(), ()> {
+) -> Result<(), ()> {
     // get the index as ttl-1, making sure we dont underflow
     let index = ttl.saturating_sub(1);
 
@@ -406,7 +449,8 @@ fn update_trace_conf(
         if let Some(measurement) = trace {
             if !measurement.done {
                 // We have already setted the value before, calculate the time difference
-                measurement.ms = u64::max(measurement.ms, time_ms) - u64::min(measurement.ms, time_ms);
+                measurement.ms =
+                    u64::max(measurement.ms, time_ms) - u64::min(measurement.ms, time_ms);
 
                 if measurement.router.is_unspecified() {
                     measurement.router = packet_source;
@@ -420,7 +464,10 @@ fn update_trace_conf(
                 measurement.done = true;
                 return Ok(());
             } else {
-                error!("Duplicated answer from origin_target: {}, router: {}", original_target, measurement.router);
+                error!(
+                    "Duplicated answer from origin_target: {}, router: {}",
+                    original_target, measurement.router
+                );
             }
         } else {
             *trace = Some(Trace {
@@ -435,6 +482,13 @@ fn update_trace_conf(
     return Err(());
 }
 
-pub fn run(hitlist: &str, localip: &str, pps: u32, method: PingMethod) {
-    Anytrace::new(hitlist, localip, pps, method).run();
+pub fn run(
+    hitlist: Option<String>,
+    localip: &str,
+    pps: u32,
+    method: PingMethod,
+    master: bool,
+    duration: Duration,
+) {
+    Anytrace::new(hitlist, localip, pps, method, master, duration).run();
 }
