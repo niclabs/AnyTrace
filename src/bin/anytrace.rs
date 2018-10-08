@@ -2,11 +2,12 @@ extern crate anytrace;
 extern crate env_logger;
 extern crate getopts;
 
-use self::getopts::{Matches, Options};
-use self::std::env;
-use self::std::time::Duration;
 use anytrace::anytrace::PingMethod;
 use anytrace::anytrace::run;
+use getopts::{Matches, Options};
+use std::env;
+use std::ops::BitXor;
+use std::time::Duration;
 
 fn print_usage(program: &str, opts: Options) {
     let brief = format!("Usage: {} FILE [options]", program);
@@ -25,8 +26,13 @@ fn get_options() -> Result<Matches, ()> {
     opts.optopt(
         "l",
         "hitlist",
-        "File containing the histlist, separated by newline. Required by --master",
+        "File containing the histlist, separated by newline. Can't be used with --stdin",
         "data/hitlist.txt",
+    );
+    opts.optflag(
+        "i",
+        "stdin",
+        "Use the stdin to receive the hitlist, separated by newline. Can't be used with --hitlist",
     );
     opts.reqopt(
         "m",
@@ -70,6 +76,13 @@ fn get_options() -> Result<Matches, ()> {
 fn main() {
     env_logger::init();
     if let Ok(opts) = get_options() {
+        if opts.opt_present("master")
+            && (opts.opt_present("hitlist")
+                .bitxor(opts.opt_present("stdin")) == false)
+        {
+            panic!("When using master, you must set either --hitlist or --stdin, and not both.");
+        }
+
         run(
             opts.opt_str("hitlist"),
             &opts.opt_str("ip").unwrap(),

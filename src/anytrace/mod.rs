@@ -11,6 +11,7 @@ use self::ping::{IcmpResponce, PingHandler, PingHandlerBuilder};
 use std;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::File;
+use std::io;
 use std::io::{BufRead, BufReader};
 use std::net::Ipv4Addr;
 use std::time::{Duration, Instant};
@@ -53,6 +54,7 @@ struct Anytrace {
     check: VecDeque<(u32, u64)>,
     seen: HashSet<Ipv4Addr>,
     lines: Option<std::io::Lines<std::io::BufReader<std::fs::File>>>,
+    stdin: Option<std::io::Lines<std::io::BufReader<std::io::Stdin>>>,
     pps: u32,
     key: u16,
 
@@ -80,12 +82,18 @@ impl Anytrace {
             _ => None,
         };
 
+        let stdin = match &file {
+            Some(_) => None,
+            _ => Some(BufReader::new(io::stdin()).lines()),
+        };
+
         return Anytrace {
             handler: handler,
             mapping: HashMap::new(),
             check: VecDeque::new(),
             seen: HashSet::new(),
             lines: file,
+            stdin: stdin,
             pps: pps,
             key: 0xBEEAu16,
 
@@ -116,27 +124,23 @@ impl Anytrace {
     /// Packet format: id: first 16 bits of the dst ip, seq: (u8 of the dst ip, u8 ttl)
     /// Output to stdin (csv): original_target, measured_router, hops, ms
     pub fn run(&mut self) {
-        println!("original_target, measured_router, hops, ms");
         loop {
             if self.check.len() < self.pps as usize * 5usize {
                 let mut end = true;
                 if self.master {
-                    if let Some(ref mut lines) = self.lines {
-                        for _ in 0..self.pps * 5 {
-                            if let Some(line) = lines.next() {
-                                if let Ok(ip) = line.unwrap().parse() {
-                                    let ip: Ipv4Addr = ip;
-                                    if !self.seen.contains(&Ipv4Addr::from(get_ip_mask(ip) | 0xFF))
-                                    {
-                                        // We don't store the information, as this packet only verifies if
-                                        // the host is online, and not execute the tracerote
-                                        self.handler.writer.send(ip);
-                                        end = false;
-                                    }
+                    for _ in 0..self.pps * 5 {
+                        if let Some(ip) = self.get_nextip() {
+                            if let Ok(ip) = ip.parse() {
+                                let ip: Ipv4Addr = ip;
+                                if !self.seen.contains(&Ipv4Addr::from(get_ip_mask(ip) | 0xFF)) {
+                                    // We don't store the information, as this packet only verifies if
+                                    // the host is online, and not execute the tracerote
+                                    self.handler.writer.send(ip);
+                                    end = false;
                                 }
-                            } else {
-                                break;
                             }
+                        } else {
+                            break;
                         }
                     }
                 }
@@ -248,7 +252,8 @@ impl Anytrace {
                     // TODO (Optional): use the packet time instead of the calculated for better accuracy
                     // Mark the router as measured and update the trace
                     self.seen.insert(packet.source);
-                    self.seen.insert(Ipv4Addr::from(get_ip_mask(packet.source) | 0xff));
+                    self.seen
+                        .insert(Ipv4Addr::from(get_ip_mask(packet.source) | 0xff));
                     return self.update_trace_entry(
                         packet.source,
                         packet.source,
@@ -434,6 +439,32 @@ impl Anytrace {
         }
         return Err(());
     }
+
+    /// Get the next line from the different outputs
+    fn get_nextip(&mut self) -> Option<String> {
+        if let Some(ref mut lines) = self.lines {
+            if let Some(line) = lines.next() {
+                if let Ok(line) = line {
+                    return Some(line);
+                }
+            }
+        } else {
+            let mut close = false;
+            if let Some(ref mut lines) = self.stdin {
+                if let Some(line) = lines.next() {
+                    if let Ok(line) = line {
+                        return Some(line);
+                    }
+                } else {
+                    close = true;
+                }
+            }
+            if close {
+                self.stdin = None;
+            }
+        }
+        return None;
+    }
 }
 
 /// Update the entry with the given information
@@ -463,7 +494,10 @@ fn update_trace_conf(
                 //    "{}, {}, {}, {}",
                 //    original_target, measurement.router, measurement.hops, measurement.ms
                 //);
-                println!("{}, {}, {}, {}", original_target, packet_source, ttl, time_ms);
+                println!(
+                    "{}, {}, {}, {}",
+                    original_target, packet_source, ttl, time_ms
+                );
 
                 // Mark the measurement as done, to prevent duplicated answers.
                 measurement.done = true;
@@ -475,7 +509,10 @@ fn update_trace_conf(
                 );
             }
         } else {
-            println!("{}, {}, {}, {}", original_target, packet_source, ttl, time_ms);
+            println!(
+                "{}, {}, {}, {}",
+                original_target, packet_source, ttl, time_ms
+            );
             *trace = Some(Trace {
                 router: packet_source,
                 hops: ttl,
