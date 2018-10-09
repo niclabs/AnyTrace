@@ -1,5 +1,5 @@
 extern crate pnet;
-extern crate ratelimit;
+extern crate ratelimit_meter;
 
 use pnet::packet::icmp::{checksum, echo_request, IcmpTypes, MutableIcmpPacket};
 use pnet::packet::ip::{IpNextHeaderProtocol, IpNextHeaderProtocols};
@@ -14,14 +14,18 @@ use std::net::{IpAddr, Ipv4Addr};
 
 use ping::PingMethod;
 
+use std::cell::RefCell;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::mpsc;
 use std::thread;
 
+use ::{Responce, IcmpResponce};
+
 pub struct PingWriter {
     writer: mpsc::Sender<PingRequest>,
     method: PingMethod,
+    item_count: RefCell<u64>,
 }
 
 struct PingRequest {
@@ -42,11 +46,18 @@ impl PingWriter {
         local: Ipv4Addr,
         method: PingMethod,
         rate_limit: u32,
+        loopback: mpsc::Sender<IcmpResponce>
     ) -> PingWriter {
         return PingWriter {
-            writer: Self::run(tx, local, method.clone(), rate_limit),
+            writer: Self::run(tx, local, method.clone(), rate_limit, loopback),
             method: method,
+            item_count: RefCell::new(0),
         };
+    }
+
+    /// Return the count of the sended packets
+    pub fn sended_packets(&self) -> u64 {
+        return *self.item_count.borrow_mut();
     }
 
     /// Send a generic Echo request to the ipv4 target asynchronously.
@@ -97,16 +108,21 @@ impl PingWriter {
                 sequence: sequence,
                 src_port: src_port,
                 dst_port: dst_port,
-            })
+            })  
             .unwrap();
+        let mut count = self.item_count.borrow_mut();
+        *count = *count + 1;
     }
 
     /// Create a new thread and a channel to receive requests asynchronously.
+    /// 
+    /// Use process_icmp or process_udp depending on the selected method.
     fn run(
         tx: TransportSender,
         local: Ipv4Addr,
         method: PingMethod,
         rate_limit: u32,
+        loopback: mpsc::Sender<IcmpResponce>,
     ) -> mpsc::Sender<PingRequest> {
         let tx = Arc::new(Mutex::new(tx));
         let (sender, receiver) = mpsc::channel::<PingRequest>();
@@ -114,18 +130,23 @@ impl PingWriter {
             PingMethod::ICMP => Self::process_icmp,
             PingMethod::UDP => Self::process_udp,
         };
-
+        use ping::writer::ratelimit_meter::Decider;
+        use std::time::Duration;
         thread::spawn(move || {
-            let mut ratelimit = ratelimit::Builder::new()
-                .capacity(rate_limit)
-                .frequency(rate_limit)
-                .quantum(1)
-                .build();
+            let mut ratelimit = ratelimit_meter::LeakyBucket::new(rate_limit, Duration::from_secs(1)).unwrap();
 
             let mut sender = tx.lock().unwrap();
             while let Ok(request) = receiver.recv() {
-                process(&mut sender, local, &request);
-                ratelimit.wait();
+                match ratelimit.check() {
+                    Ok(()) => { 
+                        process(&mut sender, local, &request, &loopback);
+                    }
+                    Err(_) => {
+                        // Wait for 100 millis to fill the bucket with more than one item,
+                        // preveting wakeups of one packet
+                        thread::sleep(Duration::from_millis(100));
+                    }
+                }
             }
         });
 
@@ -133,9 +154,9 @@ impl PingWriter {
     }
 
     /// Send a UDP packet with the given parameters
-    fn process_udp(tx: &mut TransportSender, src: Ipv4Addr, request: &PingRequest) {
-        // Buffer is [20 ipv4, 8 UDP, 8 + 2 Payload]
-        let mut buffer = [0; 20 + 8 + 10];
+    fn process_udp(tx: &mut TransportSender, src: Ipv4Addr, request: &PingRequest, loopback: &mpsc::Sender<IcmpResponce>) {
+        // Buffer is [20 ipv4, 8 UDP, 14 Payload]
+        let mut buffer = [0; 20 + 8 + 14];
         Self::format_udp(&mut buffer[20..], request);
         Self::format_ipv4(
             &mut buffer,
@@ -148,24 +169,36 @@ impl PingWriter {
             Ipv4Packet::new(&buffer).unwrap(),
             IpAddr::V4(request.target),
         ) {
-            Ok(_) => {}
-            Err(e) => println!("failed to send packet: {}", e),
+            Ok(_) => {
+                // send the packet to the loopback to store the send_time
+                let _ = loopback.send(IcmpResponce {
+                    source: src,
+                    ttl: request.ttl,
+                    icmp: Responce::LocalSendedEcho(request.target),
+                    time_ms: Self::time_from_epoch_ms(),
+                });
+            }
+            Err(e) => error!("failed to send packet: {}", e),
         };
     }
 
     /// Format the buffer as a UDP packet.
     fn format_udp(buffer: &mut [u8], request: &PingRequest) {
-        let mut udp = MutableUdpPacket::new(buffer).unwrap();
-        udp.set_source(request.src_port);
-        udp.set_destination(request.dst_port);
-        udp.set_length(10);
-        udp.set_checksum(0);
+        {
+            let mut udp = MutableUdpPacket::new(buffer).unwrap();
+            udp.set_source(request.src_port);
+            udp.set_destination(request.dst_port);
+            udp.set_length(8+14);
+            udp.set_checksum(0);
+        }
+        Self::set_payload(&mut buffer[8..], request.identifier, request.sequence);
     }
 
     /// Send a ICMP packet with the given parameters
-    fn process_icmp(tx: &mut TransportSender, src: Ipv4Addr, request: &PingRequest) {
-        // Buffer is [20 ipv4, 8 ICMP, 8 + 2 Payload]
-        let mut buffer = [0; 20 + 8 + 10];
+    fn process_icmp(tx: &mut TransportSender, src: Ipv4Addr, request: &PingRequest, loopback: &mpsc::Sender<IcmpResponce>) {
+        // Buffer is [20 ipv4, 8 ICMP, 14 Payload]
+        let mut buffer = [0; 20 + 8 + 14];
+
         Self::format_icmp(&mut buffer[20..], request.identifier, request.sequence);
         Self::format_ipv4(
             &mut buffer,
@@ -179,8 +212,16 @@ impl PingWriter {
             Ipv4Packet::new(&buffer).unwrap(),
             IpAddr::V4(request.target),
         ) {
-            Ok(_) => {}
-            Err(e) => println!("failed to send packet: {}", e),
+            Ok(_) => {
+                // send the packet to the loopback to store the send_time
+                let _ = loopback.send(IcmpResponce {
+                    source: src,
+                    ttl: request.ttl,
+                    icmp: Responce::LocalSendedEcho(request.target),
+                    time_ms: Self::time_from_epoch_ms(),
+                });
+            }
+            Err(e) => error!("failed to send packet to {}: {}", request.target, e),
         };
     }
 
@@ -188,9 +229,8 @@ impl PingWriter {
     ///
     /// The payload of the packet will be the u64 timestamp, followed by the characters 'mt'.
     fn format_icmp(buffer: &mut [u8], identifier: u16, sequence: u16) {
-        let mut payload = [0u8; 8 + 2];
-        payload[0..8].clone_from_slice(&Self::u64_to_array(Self::time_from_epoch_ms().to_be()));
-        payload[8..10].clone_from_slice(Self::get_payload_key());
+        let mut payload = [0u8; 14];
+        Self::set_payload(&mut payload, identifier, sequence);
         {
             let mut icmp = echo_request::MutableEchoRequestPacket::new(buffer).unwrap();
             icmp.set_icmp_type(IcmpTypes::EchoRequest);
@@ -254,6 +294,22 @@ impl PingWriter {
             (x & 0xff) as u8,
         ];
     }
+
+    /// Set the payload of the packet, with a minimun of 14 bytes of payload.
+    /// The format used is [id(2), seq(2), timestamp(8), key(2)].
+    fn set_payload(payload: &mut [u8], identifier: u16, sequence: u16) {
+        if payload.len() < 14 {
+            panic!("Payload buffer of incorrect length {}", payload.len());
+        }
+        payload[0..4].clone_from_slice(&[
+            (identifier >> 8) as u8, identifier as u8,
+            (sequence >> 8) as u8, sequence as u8
+        ]);
+        payload[4..12].clone_from_slice(&Self::u64_to_array(Self::time_from_epoch_ms().to_be()));
+        payload[12..14].clone_from_slice(Self::get_payload_key());
+    }
+
+
 
     /// Get the current key of the packets
     pub fn get_payload_key() -> &'static [u8; 2] {

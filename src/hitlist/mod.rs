@@ -24,7 +24,7 @@ pub fn run(localip: &str) {
         print!("{:?}, {:?}: ", packet.source, packet.ttl);
         match packet.icmp {
             ping::Responce::Echo(packet) => {
-                if let Ok(ts) = PingHandler::get_packet_timestamp_ms(&packet.payload, true) {
+                if let Ok(ts) = PingHandler::get_packet_timestamp_ms(&packet.payload) {
                     println!("Parsed correctly, delta(ms): {}", time_from_epoch_ms() - ts);
                 }
             }
@@ -35,6 +35,7 @@ pub fn run(localip: &str) {
             ping::Responce::Unreachable(_packet) => {
                 println!("Received unreachable");
             }
+            ping::Responce::LocalSendedEcho(_) => {}
         }
     }
 }
