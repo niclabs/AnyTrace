@@ -85,6 +85,9 @@ impl PingReader {
         local: Ipv4Addr,
         sender: &mpsc::Sender<IcmpResponce>,
     ) -> Result<(), ()> {
+        if packet.get_source() != local && packet.get_destination() != local {
+            return Ok(());
+        }
         if packet.get_next_level_protocol() == IpNextHeaderProtocols::Icmp {
             return Self::process_icmp4(packet.payload(), &packet, local, sender);
         }
