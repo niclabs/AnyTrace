@@ -19,7 +19,6 @@ log = "0.4.4"
 env_logger = "0.5.13"
 ratelimit_meter = "2.0.0"
 
-
 [dependencies.pnet]
 git = "https://github.com/libpnet/libpnet/"
 rev = "743e59994b5e3b9d666cc7f7500e37ee7bbde6f7"

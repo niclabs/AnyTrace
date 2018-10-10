@@ -20,7 +20,7 @@ class Statistics():
         self.initAsn()
         self.trie= pytricia.PyTricia()
         self.init_trie()
-    
+
     def initAsn(self):
         '''
         initializes asn list for object statistics
@@ -40,16 +40,51 @@ class Statistics():
         :returns the percentage of asns with at least
         1 network alive, over the total of asns
         '''
-        asnfound=0
-        for x in self.asns:
-            for i in x.networks:
-                for j in self.ips:
-                    if(j in i):
-                        asnfound+=1
-                        break
-                break
-            
-        return asnfound*100/self.asn_len
+        #while(self.trie.length > 0)
+        for ip in self.ips:
+            node= self.trie.get_key(ip)
+            if(node!=None):
+                self.trie.get(node).found= True
+
+        alive=0
+
+        for asn in self.asns:
+            if asn.found:
+                alive+=1
+        f=open("results/partialcoverage.txt", "w+")
+        coverage=alive*100/self.asn_len
+        f.write("asn found/ total asns = " + str(coverage))
+
+    def dead_asn(self):
+        '''returns a txt file with the Asn's suposed dead 
+        this is a prediction parameter based on responsiveness to ping
+        and must be corroborated'''
+
+        f = open("results/dead_Asns.txt", "w+")
+        for a in self.asns:
+            if not a.found:
+                f.write(a.number +"\n")
+
+    def alive_asn(self):
+        ''' returns a file with those Asn currently found alive'''
+        f = open("results/alive_Asns.txt", "w+")
+        for a in self.asns:
+            if a.found:
+                f.write(a.number+"\n")
+
+    def dead_networks(self):
+        f = open("results/dead_Networks.txt", "w+")
+        for a in self.asns:
+            if not a.found:
+                for net in a.networks:
+                    f.write(net +"\n")
+
+    def alive_networks(self):
+        f = open("results/alive_Networks.txt", "w+")
+        for a in self.asns:
+            if  a.found:
+                for net in a.networks:
+                    f.write(net +"\n")
 
 class ASN_number():
     def __init__(self, id, netlist):
@@ -78,7 +113,11 @@ class ASN_number():
         for net in self.networks:
             #inserting string(network), Object(Asn)
             trie.insert(net, self)
-
+       
 
 stat= Statistics("data/asn_prefixes.json", 'archivo2')
 stat.asn_partial_coverage()
+stat.dead_asn()
+stat.alive_asn()
+stat.dead_networks()
+stat.alive_networks()
