@@ -75,8 +75,9 @@ class ASN_number():
         for every network within the netoworks of the asn,
          a node will be inserted in the trie
         '''
-        #todo
-        pass
+        for net in self.networks:
+            #inserting string(network), Object(Asn)
+            trie.insert(net, self)
 
 
 stat= Statistics("data/asn_prefixes.json", 'archivo2')
