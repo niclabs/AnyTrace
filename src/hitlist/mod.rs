@@ -35,78 +35,13 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
-
-pub enum Responce {
-    Echo(EchoReply),
-    Timeout(TimeExceeded),
-    Unreachable(DestinationUnreachable),
-}
-
-pub struct IcmpResponce {
-    pub source: Ipv4Addr,
-    pub ttl: u8,
-    pub icmp: Responce,
-}
-
-/* network_state: saves de current host adress iterator
-of a network,
-and its state -> alive/not found yet
- */
-#[derive(Debug)]
-pub struct network_state {
-    address: IPAddress,
-    current_ip: BigUint,
-    last: bool,
-}
-
-pub fn str_to_ip(network: &str) -> IPAddress {
-    let ip_network = IPAddress::parse(network).unwrap();
-    return ip_network;
-}
-
-/*net_to_vector recieves a network string and returns a vector of bits 
-for the net  */
-pub fn net_to_vector(ip: &IPAddress) -> Vec<u8> {
-    let host = ip.host_address.to_u32().unwrap();
-    let mut vec = Vec::new();
-    let mask = ip.prefix.get_prefix();
-    for i in 0..mask {
-        let num = ((host >> 31 - i) & 1) as u8;
-        vec.push(num);
-    }
-    return vec;
-}
-/*create_trie : Vector of strings-> Trie key <vector of bits> Value <Network_state>
-receives a vector of strings containing network addresses, and orders 
-theese in a Trie struct
- */
-pub fn create_trie(vec: &mut Vec<String>) -> Trie<Vec<u8>, RefCell<network_state>> {
-    let mut trie = Trie::new();
-    while vec.len() > 0 {
-        let net = vec.pop().unwrap();
-        let ip_net = str_to_ip(&net);
-        let bit_vec = net_to_vector(&ip_net);
-        let host_address = ip_net.network().host_address;
-        trie.insert(
-            bit_vec,
-            RefCell::new(network_state {
-                address: ip_net,
-                current_ip: host_address,
-                last: false,
-            }),
-        );
-    }
-    return trie;
-}
-
-// Dictionary for reading json file
-type Dictionary = HashMap<String, Vec<String>>;
+mod hdrs;
 
 pub fn run(dummy: &str) {
     let mut file = File::open("data/asn_prefixes.json").unwrap();
     let mut data = String::new();
     file.read_to_string(&mut data).unwrap();
-    let dict: Dictionary = serde_json::from_str(&data).unwrap();
+    let dict: hdrs::Dictionary = serde_json::from_str(&data).unwrap();
     let mut network_vec = Vec::new();
 
     for (key, value) in dict.into_iter() {
@@ -114,11 +49,11 @@ pub fn run(dummy: &str) {
         network_vec.append(&mut vec);
     }
     info!("{}", network_vec.len());
-    let mut trie = create_trie(&mut network_vec);
+    let mut trie = hdrs::create_trie(&mut network_vec);
     channel_runner(&mut trie);
 }
 
-pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
+pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>) {
     let rate= 10000;
     let handler = PingHandlerBuilder::new()
         .localip("172.30.65.57")
@@ -137,7 +72,7 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
     // sender process
     let read = thread::spawn(move || {
         let mut sender = sender.lock().unwrap();
-        read_alive_ip(&r_handler, &sender);
+        hdrs::read_alive_ip(&r_handler, &sender);
     });
 
     // writer process
@@ -163,7 +98,7 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
             let i = value.borrow().current_ip.clone();
             let ip = ip_network.from(&value.borrow().current_ip, &ip_network.prefix);
             let last = ip_network.last();
-            write_alive_ip(&ip, &wr_handler);
+            hdrs::write_alive_ip(&ip, &wr_handler);
             //let pile = pile + 1;
             if ip == last {
                 value.borrow_mut().last = true;
@@ -176,7 +111,7 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
 
         while let Ok(ip_received) = receiver.recv_timeout(Duration::from_millis(200)) {
             //let pile = pile.saturating_sub(1);
-            let vec = net_to_vector(&ip_received);
+            let vec = hdrs::net_to_vector(&ip_received);
             let mut first = true;
 
             loop {
@@ -193,7 +128,7 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
                         //let state = value.borrow().state.clone();
                         let network_add = value.borrow().address.clone();
                         // verify if the network matching isnt 0.0.0.0 (universe)
-                        if network_add == str_to_ip(&"0.0.0.0/0") {
+                        if network_add == hdrs::str_to_ip(&"0.0.0.0/0") {
                             //remove 0.0.0.0
                             remove= true;
                             break;
@@ -225,65 +160,4 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<network_state>>) {
         }
         // if all true break
     }
-}
-/* auxiliary function for unwraping Option type without consuming self*/
-fn return_unwrap<'a>(
-    op: &'a Option<SubTrie<'a, Vec<u8>, RefCell<network_state>>>,
-) -> &'a SubTrie<'a, Vec<u8>, RefCell<network_state>> {
-    match op {
-        &Some(ref val) => val,
-        &None => panic!("called Option::unwrap() on a None value"),
-    }
-}
-
-/* write_aliv_ip : &IPAdress x &PingHAndles -> Void
-sends a ping to ip adress "ip" using handler param
-*/
-
-fn write_alive_ip(ip: &IPAddress, handler: &PingWriter) {
-    let st = &ip.to_s();
-    let target: Ipv4Addr = st.parse().unwrap();
-    handler.send(target); //pinging
-}
-
-/* read_alive_ip : &Pinghandler x & Sender<IPAdress> ->Void
-reads the incoming response packages and analizes the traceroute,
-sending the source ip from the last alive ip found, back to the writer process
-*/
-fn read_alive_ip(handler: &PingReader, sender: &mpsc::Sender<IPAddress>) {
-    // response packet
-    while let Ok(packet) = handler.reader().recv() {
-        match packet.icmp {
-            // response
-            ping::Responce::Echo(icmp) => {
-                if let Ok(ts) = PingHandler::get_packet_timestamp_ms(&icmp.payload) {
-                    let ipv4source = packet.source;
-                    let source: IPAddress = IPAddress::parse(format!("{:?}", ipv4source)).unwrap();
-                    //sends source back to writer process
-                    if let Err(_) = sender.send(source) {
-                        // burries child process
-                        return;
-                    }
-                }
-            }
-            ping::Responce::Timeout(_packet) => {
-                //println!("Received timeout{}", target);
-            }
-            ping::Responce::Unreachable(_packet) => {
-                //println!("Received unreachable {}", target);
-            }
-            ping::Responce::LocalSendedEcho(_) => {}
-        }
-    }
-}
-/* time_from_epoch_ms :Void-> Void
- Get the current time in milliseconds*/
-fn time_from_epoch_ms() -> u64 {
-    let start = SystemTime::now();
-    let since_the_epoch = start
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards");
-    let in_ms =
-        since_the_epoch.as_secs() * 1000 + since_the_epoch.subsec_nanos() as u64 / 1_000_000;
-    return in_ms;
 }
