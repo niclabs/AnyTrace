@@ -29,7 +29,11 @@ use hitlist::ratelimit_meter::Decider;
 use hitlist::num::ToPrimitive;
 use std::cell::RefCell;
 use std::collections::HashMap;
+
+use std::io::BufReader;
+use std::io::BufRead;
 use std::fs::File;
+
 use std::io::Read;
 use std::sync::mpsc;
 use std::sync::Arc;
@@ -50,12 +54,25 @@ pub fn refresh_file()
         let mut vec = value;
         network_vec.append(&mut vec);
     }
+
     let mut trie = hdrs::create_trie(&mut network_vec);
 
     //reading ip file into a vector
+
+    let f = File::open("archivo").unwrap();
+    let file = BufReader::new(&f);
+    let mut data = Vec::new();
+    for (num, line) in file.lines().enumerate() {
+        let l = line.unwrap();
+            data.push(l);
+        }
+    println!("{:?}", data);       
+    /*
     let mut file = File::open("archivo").unwrap();
     let mut data = Vec::new();
     file.read_to_end(&mut data);
+    println!("{:?}", data);
+    */
 
     //initilizing handler for ping
     let rate= 10000;
@@ -81,7 +98,7 @@ pub fn refresh_file()
 
     // writer process
     let mut ratelimit = ratelimit_meter::LeakyBucket::new(rate, Duration::from_secs(1)).unwrap();
-    
+
     loop{
         //verify if every ip in the file was already pinged
 
@@ -89,8 +106,8 @@ pub fn refresh_file()
             break;
         }
 
-        mut iter =0;
-        mut j= 0;
+        let mut iter =0;
+        let mut j= 0;
         for ip in data.iter(){
             //rate limit was reached
             if let Err(_) = ratelimit.check() {
@@ -98,8 +115,8 @@ pub fn refresh_file()
             }
             iter+=1;
 
-            this_ip= IPAddress::parse(ip).unwrap();
-            hdrs::write_alive_ip(&this_ip, &wr_handler);
+            //this_ip= IPAddress::parse(ip).unwrap();
+            //hdrs::write_alive_ip(&this_ip, &wr_handler);
             
         }
         while j<iter{
@@ -114,7 +131,7 @@ pub fn refresh_file()
                     let key;
                     let mut remove = false;
                     {
-                        let mut node_match_op = networks.get_ancestor(&vec);
+                        let mut node_match_op = trie.get_ancestor(&vec);
 
                         if node_match_op.is_some() {
                             let node = node_match_op.unwrap();
@@ -142,13 +159,13 @@ pub fn refresh_file()
                         }
                     }
                     if remove {
-                        debug!("{}trielen",networks.len());
-                        networks.remove(&key);
+                        debug!("{}trielen",trie.len());
+                        trie.remove(&key);
                     }
                 }
         }
     }
-    refresh_trie(&networks);
+    refresh_trie(&mut trie);
 }
 /*refresh_trie: network trie<vector, refcell>-> void
 this function pings the networks that have not been reached, once the file
