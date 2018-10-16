@@ -4,10 +4,10 @@ extern crate num_traits;
 extern crate ping;
 extern crate pnet;
 extern crate radix_trie;
+extern crate ratelimit_meter;
 extern crate rustc_serialize;
 extern crate serde;
 extern crate serde_json;
-extern crate ratelimit_meter;
 
 use self::ipaddress::IPAddress;
 use self::num::bigint::BigUint;
@@ -20,11 +20,11 @@ use self::pnet::packet::icmp::echo_reply::EchoReply;
 use self::pnet::packet::icmp::time_exceeded::TimeExceeded;
 use self::pnet::packet::Packet;
 use self::radix_trie::{SubTrie, Trie, TrieCommon};
+use hitlist::ratelimit_meter::Decider;
 use std::borrow::Borrow;
 use std::net::Ipv4Addr;
 use std::ops::Add;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use hitlist::ratelimit_meter::Decider;
 
 use hitlist::num::ToPrimitive;
 use std::cell::RefCell;
@@ -36,6 +36,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
 mod hdrs;
+pub mod refresh;
 
 pub fn run(dummy: &str) {
     let mut file = File::open("data/asn_prefixes.json").unwrap();
@@ -54,7 +55,7 @@ pub fn run(dummy: &str) {
 }
 
 pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>) {
-    let rate= 10000;
+    let rate = 10000;
     let handler = PingHandlerBuilder::new()
         .localip("172.30.65.57")
         .method(PingMethod::ICMP)
@@ -87,7 +88,7 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>
                 continue;
             }
             // todo let mut cnt= 0 cnt ++ si cnt > rate terminar
-            if let Err(_)=ratelimit.check() {
+            if let Err(_) = ratelimit.check() {
                 mybreak = false;
                 break;
             }
@@ -130,7 +131,7 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>
                         // verify if the network matching isnt 0.0.0.0 (universe)
                         if network_add == hdrs::str_to_ip(&"0.0.0.0/0") {
                             //remove 0.0.0.0
-                            remove= true;
+                            remove = true;
                             break;
                         }
                         //if state { break;}
@@ -149,7 +150,7 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>
                 }
                 if remove {
                     //todo
-                    debug!("{}trielen",networks.len());
+                    debug!("{}trielen", networks.len());
                     networks.remove(&key);
                 }
             }

@@ -35,11 +35,11 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
-mod hdrs;
+use ::hitlist::hdrs;
 
 pub fn refresh_file()
 {   
-    //creating trie
+    //creating trie from asn file
     let mut jsonfile = File::open("data/asn_prefixes.json").unwrap();
     let mut jsondata = String::new();
     jsonfile.read_to_string(&mut jsondata).unwrap();
@@ -53,9 +53,10 @@ pub fn refresh_file()
     let mut trie = hdrs::create_trie(&mut network_vec);
 
     //reading ip file into a vector
-    let mut file = File::open("archivo2").unwrap();
+    let mut file = File::open("archivo").unwrap();
     let mut data = Vec::new();
     file.read_to_end(&mut data);
+
     //initilizing handler for ping
     let rate= 10000;
     let handler = PingHandlerBuilder::new()
@@ -75,14 +76,84 @@ pub fn refresh_file()
     // sender process
     let read = thread::spawn(move || {
         let mut sender = sender.lock().unwrap();
-        read_alive_ip(&r_handler, &sender);
+        hdrs::read_alive_ip(&r_handler, &sender);
     });
 
     // writer process
     let mut ratelimit = ratelimit_meter::LeakyBucket::new(rate, Duration::from_secs(1)).unwrap();
+    
+    loop{
+        //verify if every ip in the file was already pinged
 
-    for ip in data.iter(){
-        this_ip= IPAddress::parse(ip).unwrap();
-        hdrs::write_alive_ip(&this_ip, &wr_handler);
+        if data.len()==0{
+            break;
+        }
+
+        mut iter =0;
+        mut j= 0;
+        for ip in data.iter(){
+            //rate limit was reached
+            if let Err(_) = ratelimit.check() {
+                break;
+            }
+            iter+=1;
+
+            this_ip= IPAddress::parse(ip).unwrap();
+            hdrs::write_alive_ip(&this_ip, &wr_handler);
+            
+        }
+        while j<iter{
+            data.remove(0);
+            j+=1;
+        }
+
+        while let Ok(ip_received) = receiver.recv_timeout(Duration::from_millis(200)){
+            let vec = hdrs::net_to_vector(&ip_received);
+            let mut first = true;
+            loop {
+                    let key;
+                    let mut remove = false;
+                    {
+                        let mut node_match_op = networks.get_ancestor(&vec);
+
+                        if node_match_op.is_some() {
+                            let node = node_match_op.unwrap();
+                            key = node.key().unwrap().clone();
+                            let value = node.value().unwrap();
+                            let network_add = value.borrow().address.clone();
+
+                            // verify if the network matching isnt 0.0.0.0 (universe)
+                            if network_add == hdrs::str_to_ip(&"0.0.0.0/0") {
+                                //remove 0.0.0.0
+                                remove= true;
+                                break;
+                            }
+                            if network_add.includes(&ip_received) {
+                                remove = true;
+                                if first {
+                                    println!("{}", ip_received.to_s());
+                                    first = false;
+                                }
+                                // truncate vector to ancestors length
+                                let len = key.len();
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                    if remove {
+                        debug!("{}trielen",networks.len());
+                        networks.remove(&key);
+                    }
+                }
+        }
     }
+    refresh_trie(&networks);
+}
+/*refresh_trie: network trie<vector, refcell>-> void
+this function pings the networks that have not been reached, once the file
+of ips has already been pinged
+*/
+pub fn refresh_trie(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>){
+    return;
 }
