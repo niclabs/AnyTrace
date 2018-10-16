@@ -25,7 +25,7 @@ struct TraceConfiguration {
     source: Ipv4Addr,
     max_hop: u8,
     current_ttl: u8,
-    traces: Vec<Option<Trace>>, //TODO: Check before overriding, as some ips (91.68.246.158) may send multiple packets
+    traces: Vec<Option<Trace>>,
 }
 
 #[derive(Debug, Clone)]
@@ -146,8 +146,9 @@ impl Anytrace {
                 }
                 if end && self.check.is_empty() {
                     if start
-                        + Duration::from_secs(self.handler.writer.sended_packets() / self.pps as u64)
-                        + Duration::from_secs(10) > Instant::now()
+                        + Duration::from_secs(
+                            self.handler.writer.sended_packets() / self.pps as u64,
+                        ) + Duration::from_secs(10) > Instant::now()
                     {
                         info!("Waiting for writting to finish");
                         use std::thread;
