@@ -311,9 +311,15 @@ impl Anytrace {
                         if self.seen.contains(&packet.source) {
                             // Only skip if the last hop is not the same ip address, as some use the same router for more than one hop
                             let mut skip = true;
-                            if let Some(Some(upper)) = trace.traces.get((ttl as usize) + 1 - 1) {
-                                if upper.router == packet.source {
-                                    skip = false;
+                            for i in (ttl as usize + 1 - 1)..trace.traces.len() {
+                                if let Some(Some(upper)) = trace.traces.get(i) {
+                                    if upper.router == Ipv4Addr::new(0, 0, 0, 0) {
+                                        continue;
+                                    }
+                                    if upper.router == packet.source {
+                                        skip = false;
+                                    }
+                                    break;
                                 }
                             }
                             if skip {
