@@ -19,3 +19,11 @@ To set the capabilities of the generated binary, and not use root, you have to u
 ```
 sudo setcap CAP_NET_RAW+ep anytrace
 ```
+
+# Analysis
+## Generating bgp.csv
+
+Source: https://bitbucket.org/ripencc/bgpdump/wiki/Home
+```
+./bgpdump bview.20181017.0000.gz -m | awk 'BEGIN{FS="|";OFS="|"}{print $6", "$7}' | awk 'BEGIN{FS=" ";OFS=" "}{print $1$NF}' | sort | uniq > data/bgp.csv
+```

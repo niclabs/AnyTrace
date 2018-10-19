@@ -1,6 +1,6 @@
-use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry;
-use std::io::{BufRead, stdin};
+use std::collections::{HashMap, HashSet};
+use std::io::{stdin, BufRead};
 use std::net::Ipv4Addr;
 
 #[derive(Debug)]
@@ -75,7 +75,7 @@ pub fn join_data(log_statistics: bool) {
             for k in &item.data {
                 if let Some(d) = k {
                     net.insert(u32::from(d.dst) & 0xFFFFFF00);
-                    if d.measured { 
+                    if d.measured {
                         matched += 1;
                     } else {
                         nomatch += 1;
@@ -83,7 +83,7 @@ pub fn join_data(log_statistics: bool) {
                 }
             }
         }
-        
+
         //println!("{:?}", map);
         info!("Statistics");
         info!("len: {}", map.len());
