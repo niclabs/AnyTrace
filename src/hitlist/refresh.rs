@@ -66,13 +66,7 @@ pub fn refresh_file()
         let l = line.unwrap();
             data.push(l);
         }
-    println!("{:?}", data);       
-    /*
-    let mut file = File::open("archivo").unwrap();
-    let mut data = Vec::new();
-    file.read_to_end(&mut data);
-    println!("{:?}", data);
-    */
+    //println!("{:?}", data);       
 
     //initilizing handler for ping
     let rate= 10000;
@@ -98,7 +92,8 @@ pub fn refresh_file()
 
     // writer process
     let mut ratelimit = ratelimit_meter::LeakyBucket::new(rate, Duration::from_secs(1)).unwrap();
-
+     
+    // visits every ip in the ip file
     loop{
         //verify if every ip in the file was already pinged
 
@@ -123,8 +118,23 @@ pub fn refresh_file()
             data.remove(0);
             j+=1;
         }
+       
+        refresh_trie(&mut trie);
+    }
+    /*once the entire ip file is pingged
+     the remaining networks in the trie must be pinged*/
 
-        while let Ok(ip_received) = receiver.recv_timeout(Duration::from_millis(200)){
+}
+
+/* 
+refresh_trie: trie: trie<vector, refcell>-> void 
+verifiying if that ip belongs to a network from
+the trie
+->removes the network from the trie*/
+
+pub fn refresh_trie(trie: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>){
+
+    while let Ok(ip_received) = receiver.recv_timeout(Duration::from_millis(200)){
             let vec = hdrs::net_to_vector(&ip_received);
             let mut first = true;
             loop {
@@ -164,13 +174,5 @@ pub fn refresh_file()
                     }
                 }
         }
-    }
-    refresh_trie(&mut trie);
-}
-/*refresh_trie: network trie<vector, refcell>-> void
-this function pings the networks that have not been reached, once the file
-of ips has already been pinged
-*/
-pub fn refresh_trie(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>){
-    return;
+
 }
