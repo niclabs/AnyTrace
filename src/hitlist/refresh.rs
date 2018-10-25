@@ -25,7 +25,6 @@ use std::net::Ipv4Addr;
 use std::ops::Add;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use hitlist::ratelimit_meter::Decider;
-
 use hitlist::num::ToPrimitive;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -33,9 +32,9 @@ use std::collections::HashMap;
 use std::io::BufReader;
 use std::io::BufRead;
 use std::fs::File;
-
 use std::io::Read;
 use std::sync::mpsc;
+use std::sync::mpsc::Receiver;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
@@ -97,10 +96,6 @@ pub fn refresh_file()
     loop{
         //verify if every ip in the file was already pinged
 
-        if data.len()==0{
-            break;
-        }
-
         let mut iter =0;
         let mut j= 0;
         for ip in data.iter(){
@@ -119,11 +114,49 @@ pub fn refresh_file()
             j+=1;
         }
        
-        refresh_trie(&mut trie);
-    }
-    /*once the entire ip file is pingged
-     the remaining networks in the trie must be pinged*/
+        refresh_trie(&mut trie,receiver);
 
+        if data.len()==0{
+            break;}
+        
+    }
+    /*once the entire ip file is pinged
+     the remaining networks in the trie must be pinged*/
+    loop{
+        let mut mybreak = true;
+
+        for (key, value) in trie.iter() {
+            if value.borrow().last {
+                continue;
+            }
+            // todo let mut cnt= 0 cnt ++ si cnt > rate terminar
+            if let Err(_) = ratelimit.check() {
+                mybreak = false;
+                break;
+            }
+
+            mybreak = false;
+            let ip_network = value.borrow().address.clone();
+            //reading thread created
+            let i = value.borrow().current_ip.clone();
+            let ip = ip_network.from(&value.borrow().current_ip, &ip_network.prefix);
+            let last = ip_network.last();
+            hdrs::write_alive_ip(&ip, &wr_handler);
+            //let pile = pile + 1;
+            if ip == last {
+                value.borrow_mut().last = true;
+            }
+            value.borrow_mut().current_ip = i.add(BigUint::one());
+        }
+
+        refresh_trie(&mut trie, &receiver);
+        
+        
+        if mybreak {
+            break;
+        }
+
+    }
 }
 
 /* 
@@ -132,7 +165,7 @@ verifiying if that ip belongs to a network from
 the trie
 ->removes the network from the trie*/
 
-pub fn refresh_trie(trie: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>){
+pub fn refresh_trie(trie: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>, receiver: &Receiver<IPAddress>){
 
     while let Ok(ip_received) = receiver.recv_timeout(Duration::from_millis(200)){
             let vec = hdrs::net_to_vector(&ip_received);
