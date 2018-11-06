@@ -58,13 +58,14 @@ pub fn refresh_file()
 
     //reading ip file into a vector
 
-    let f = File::open("archivo").unwrap();
+    let f = File::open("archivo2").unwrap();
     let file = BufReader::new(&f);
     let mut data = Vec::new();
     for (num, line) in file.lines().enumerate() {
         let l = line.unwrap();
             data.push(l);
         }
+    println!("data creada"); 
     //println!("{:?}", data);       
 
     //initilizing handler for ping
@@ -74,6 +75,8 @@ pub fn refresh_file()
         .method(PingMethod::ICMP)
         .rate_limit(rate)
         .build();
+
+    println!("handler created"); 
 
     // channel between read/write thread
     // sender process sends message to receiver
@@ -114,7 +117,7 @@ pub fn refresh_file()
             j+=1;
         }
        
-        refresh_trie(&mut trie,receiver);
+        refresh_trie(&mut trie,&receiver);
 
         if data.len()==0{
             break;}
