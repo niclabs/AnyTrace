@@ -23,7 +23,7 @@ use std::thread;
 use ::{Responce, IcmpResponce};
 
 pub struct PingWriter {
-    writer: mpsc::Sender<PingRequest>,
+    writer: mpsc::SyncSender<PingRequest>,
     method: PingMethod,
     item_count: RefCell<u64>,
 }
@@ -123,9 +123,9 @@ impl PingWriter {
         method: PingMethod,
         rate_limit: u32,
         loopback: mpsc::Sender<IcmpResponce>,
-    ) -> mpsc::Sender<PingRequest> {
+    ) -> mpsc::SyncSender<PingRequest> {
         let tx = Arc::new(Mutex::new(tx));
-        let (sender, receiver) = mpsc::channel::<PingRequest>();
+        let (sender, receiver) = mpsc::sync_channel::<PingRequest>(1_000_000);
         let process = match method {
             PingMethod::ICMP => Self::process_icmp,
             PingMethod::UDP => Self::process_udp,
