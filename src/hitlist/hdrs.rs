@@ -57,6 +57,7 @@ pub struct network_state {
     pub address: IPAddress,
     pub current_ip: BigUint,
     pub last: bool,
+    pub sent: i32,
 }
 
 pub fn str_to_ip(network: &str) -> IPAddress {
@@ -93,6 +94,7 @@ pub fn create_trie(vec: &mut Vec<String>) -> Trie<Vec<u8>, RefCell<network_state
                 address: ip_net,
                 current_ip: host_address,
                 last: false,
+                sent:0,
             }),
         );
     }

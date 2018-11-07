@@ -65,7 +65,6 @@ pub fn refresh_file()
         let l = line.unwrap();
             data.push(l);
         }
-    println!("data creada"); 
     //println!("{:?}", data);       
 
     //initilizing handler for ping
@@ -75,8 +74,6 @@ pub fn refresh_file()
         .method(PingMethod::ICMP)
         .rate_limit(rate)
         .build();
-
-    println!("handler created"); 
 
     // channel between read/write thread
     // sender process sends message to receiver
@@ -107,9 +104,8 @@ pub fn refresh_file()
                 break;
             }
             iter+=1;
-
-            //this_ip= IPAddress::parse(ip).unwrap();
-            //hdrs::write_alive_ip(&this_ip, &wr_handler);
+            let this_ip= hdrs::str_to_ip(ip);
+            hdrs::write_alive_ip(&this_ip, &wr_handler);
             
         }
         while j<iter{
@@ -123,6 +119,7 @@ pub fn refresh_file()
             break;}
         
     }
+    
     /*once the entire ip file is pinged
      the remaining networks in the trie must be pinged*/
     loop{
@@ -137,19 +134,25 @@ pub fn refresh_file()
                 mybreak = false;
                 break;
             }
-
+            
             mybreak = false;
-            let ip_network = value.borrow().address.clone();
-            //reading thread created
-            let i = value.borrow().current_ip.clone();
-            let ip = ip_network.from(&value.borrow().current_ip, &ip_network.prefix);
-            let last = ip_network.last();
-            hdrs::write_alive_ip(&ip, &wr_handler);
-            //let pile = pile + 1;
-            if ip == last {
-                value.borrow_mut().last = true;
+            let mut it =0;
+            while it< value.borrow().sent{
+                let ip_network = value.borrow().address.clone();
+                //reading thread created
+                let i = value.borrow().current_ip.clone();
+                let ip = ip_network.from(&value.borrow().current_ip, &ip_network.prefix);
+                let last = ip_network.last();
+                hdrs::write_alive_ip(&ip, &wr_handler);
+                //let pile = pile + 1;
+                if ip == last {
+                    value.borrow_mut().last = true;
+                    break;
+                }
+                value.borrow_mut().current_ip = i.add(BigUint::one());
+                it+=1;
             }
-            value.borrow_mut().current_ip = i.add(BigUint::one());
+            value.borrow_mut().sent +=1;
         }
 
         refresh_trie(&mut trie, &receiver);

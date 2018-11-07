@@ -14,6 +14,7 @@ use std::net::{IpAddr, Ipv4Addr};
 
 use ping::PingMethod;
 
+use std::cell::RefCell;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::mpsc;
@@ -22,8 +23,9 @@ use std::thread;
 use ::{Responce, IcmpResponce};
 
 pub struct PingWriter {
-    writer: mpsc::Sender<PingRequest>,
+    writer: mpsc::SyncSender<PingRequest>,
     method: PingMethod,
+    item_count: RefCell<u64>,
 }
 
 struct PingRequest {
@@ -49,7 +51,13 @@ impl PingWriter {
         return PingWriter {
             writer: Self::run(tx, local, method.clone(), rate_limit, loopback),
             method: method,
+            item_count: RefCell::new(0),
         };
+    }
+
+    /// Return the count of the sended packets
+    pub fn sended_packets(&self) -> u64 {
+        return *self.item_count.borrow_mut();
     }
 
     /// Send a generic Echo request to the ipv4 target asynchronously.
@@ -102,6 +110,8 @@ impl PingWriter {
                 dst_port: dst_port,
             })  
             .unwrap();
+        let mut count = self.item_count.borrow_mut();
+        *count = *count + 1;
     }
 
     /// Create a new thread and a channel to receive requests asynchronously.
@@ -113,9 +123,9 @@ impl PingWriter {
         method: PingMethod,
         rate_limit: u32,
         loopback: mpsc::Sender<IcmpResponce>,
-    ) -> mpsc::Sender<PingRequest> {
+    ) -> mpsc::SyncSender<PingRequest> {
         let tx = Arc::new(Mutex::new(tx));
-        let (sender, receiver) = mpsc::channel::<PingRequest>();
+        let (sender, receiver) = mpsc::sync_channel::<PingRequest>(1_000_000);
         let process = match method {
             PingMethod::ICMP => Self::process_icmp,
             PingMethod::UDP => Self::process_udp,
