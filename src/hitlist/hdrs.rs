@@ -94,7 +94,7 @@ pub fn create_trie(vec: &mut Vec<String>) -> Trie<Vec<u8>, RefCell<network_state
                 address: ip_net,
                 current_ip: host_address,
                 last: false,
-                sent:0,
+                sent:1,
             }),
         );
     }
