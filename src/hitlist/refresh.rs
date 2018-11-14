@@ -54,6 +54,18 @@ pub fn refresh_file()
         network_vec.append(&mut vec);
     }
 
+     //reading black list of networks
+
+    let bf= File::open("data/blacklist.txt").unwrap();
+    let bfile= BufReader::new(&bf);
+    let mut bdata =  Vec::new();
+    for (num, line) in bfile.lines().enumerate() {
+        let l = line.unwrap();
+        bdata.push(l);
+    }
+    //black list trie
+    let mut blist_trie = hdrs::create_trie(&mut bdata);
+    // general trie
     let mut trie = hdrs::create_trie(&mut network_vec);
 
     //reading ip file into a vector
@@ -63,9 +75,8 @@ pub fn refresh_file()
     let mut data = Vec::new();
     for (num, line) in file.lines().enumerate() {
         let l = line.unwrap();
-            data.push(l);
+        data.push(l);
         }
-    //println!("{:?}", data);       
 
     //initilizing handler for ping
     let rate= 10000;
@@ -128,6 +139,11 @@ pub fn refresh_file()
         for (key, value) in trie.iter() {
             if value.borrow().last {
                 continue;
+            }
+            // verify if actual network is in blacklist
+            let node_match_op = blist_trie.get_ancestor(key);
+            if node_match_op.is_some() {
+                 continue;
             }
             // todo let mut cnt= 0 cnt ++ si cnt > rate terminar
             if let Err(_) = ratelimit.check() {

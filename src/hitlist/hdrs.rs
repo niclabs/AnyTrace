@@ -100,6 +100,32 @@ pub fn create_trie(vec: &mut Vec<String>) -> Trie<Vec<u8>, RefCell<network_state
     }
     return trie;
 }
+/* creates a trie from a vector, filtering those networks within the blacklist of ips*/
+pub fn create_trie_filtered(vec: &mut Vec<String>, blcklist: &mut Trie<Vec<u8>, RefCell<network_state>>) 
+-> Trie<Vec<u8>, RefCell<network_state>> 
+{
+    let mut trie = Trie::new();
+    while vec.len() > 0 {
+        let net = vec.pop().unwrap();
+        let ip_net = str_to_ip(&net);
+        let bit_vec = net_to_vector(&ip_net);
+        let host_address = ip_net.network().host_address;
+        let node_match_op = blcklist.get_ancestor(&bit_vec);
+        if node_match_op.is_some() {
+            continue;
+        }
+        trie.insert(
+            bit_vec,
+            RefCell::new(network_state {
+                address: ip_net,
+                current_ip: host_address,
+                last: false,
+                sent:1,
+            }),
+        );
+    }
+    return trie;  
+}
 
 // Dictionary for reading json file
 pub type Dictionary = HashMap<String, Vec<String>>;

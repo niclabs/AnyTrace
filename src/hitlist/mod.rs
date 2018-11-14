@@ -55,6 +55,18 @@ pub fn run(dummy: &str) {
 }
 
 pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>) {
+    
+    //reading black list of networks
+    let bf= File::open("data/blacklist.txt").unwrap();
+    let bfile= BufReader::new(&bf);
+    let mut bdata =  Vec::new();
+    for (num, line) in bfile.lines().enumerate() {
+        let l = line.unwrap();
+        bdata.push(l);
+    }
+    //black list trie
+    let mut blist_trie = hdrs::create_trie(&mut bdata);
+
     let rate = 10000;
     let handler = PingHandlerBuilder::new()
         .localip("172.30.65.57")
@@ -87,6 +99,13 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>
             if value.borrow().last {
                 continue;
             }
+
+            // verify if actual network is in blacklist
+            let node_match_op = blist_trie.get_ancestor(key);
+            if node_match_op.is_some() {
+                 continue;
+            }
+
             // todo let mut cnt= 0 cnt ++ si cnt > rate terminar
             if let Err(_) = ratelimit.check() {
                 mybreak = false;
