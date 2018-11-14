@@ -135,8 +135,8 @@ impl Anytrace {
                                 if !self.seen.contains(&Ipv4Addr::from(get_ip_mask(ip) | 0xFF)) {
                                     // We don't store the information, as this packet only verifies if
                                     // the host is online, and not execute the tracerote
-                                    self.handler.writer.send(ip);
-                                    end = false;
+                                    self.handler.writer.send(ip); // try_send or break
+                                    end = false; // move outside
                                 }
                             }
                         } else {

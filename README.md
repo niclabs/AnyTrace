@@ -13,6 +13,11 @@ To generate the ip hitlist:
 cargo run --bin hitlist
 ```
 
+```
+nmap --randomize-hosts -sL -n 0.0.0.0/0 | head | grep 'Nmap scan report for' | cut -f 5 -d ' ' | awk -F',' 'NF {print $1; print $2;}' | sort -u
+
+```
+
 ## Setcap
 To set the capabilities of the generated binary, and not use root, you have to use the following command
 

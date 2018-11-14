@@ -32,7 +32,8 @@ impl Measurement {
 }
 
 pub fn load_data() -> HashMap<Ipv4Addr, Measurement> {
-        let mut map: HashMap<Ipv4Addr, Measurement> = HashMap::new();
+    debug!("Loading data from stdin");
+    let mut map: HashMap<Ipv4Addr, Measurement> = HashMap::new();
     let stdin = stdin();
     let stdin = stdin.lock();
     for line in stdin.lines() {
@@ -69,6 +70,7 @@ pub fn load_data() -> HashMap<Ipv4Addr, Measurement> {
 }
 
 pub fn load_asn() -> IpLookupTable<Ipv4Addr, Vec<u32>> {
+    debug!("Loading asn");
     let mut tbl : IpLookupTable<Ipv4Addr, Vec<u32>> = IpLookupTable::new();
     let filename = "data/bgp.csv";
     let f = File::open(filename).unwrap();
