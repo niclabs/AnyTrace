@@ -1,6 +1,7 @@
 import json
 import ipaddress
 import pytricia
+import sys
 
 class Statistics():
     def __init__(self, jdata, sfile):
@@ -114,10 +115,9 @@ class ASN_number():
             #inserting string(network), Object(Asn)
             trie.insert(net, self)
        
-
-stat= Statistics("data/asn_prefixes.json", 'archivo2')
-stat.asn_partial_coverage()
-stat.dead_asn()
-stat.alive_asn()
-stat.dead_networks()
-stat.alive_networks()
+if __name__ == '__main__':
+    method =sys.argv[1]
+    stat= Statistics("data/asn_prefixes.json", 'archivo2')
+    map ={ "coverage": stat.asn_partial_coverage() , "dead_asn":stat.dead_asn(),
+    "alive_asn":  stat.alive_asn() , "dead_networks": stat.dead_networks() , "alive_networks":  stat.alive_networks() }  
+    map[method]
