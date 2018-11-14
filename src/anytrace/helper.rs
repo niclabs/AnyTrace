@@ -42,13 +42,6 @@ pub fn verify_packet_network(source: Ipv4Addr, network: u32) -> bool {
     return source == network;
 }
 
-/// Verify the ICMP packet source with his identifier and sequence
-pub fn verify_packet(source: Ipv4Addr, identifier: u16, sequence: u16) -> bool {
-    let network = u32::from(source) & 0xFFFFFF00;
-    let (ip, _) = decode_id_seq(identifier, sequence);
-    return network == ip;
-}
-
 /// Calculate the aproximate distance in hops to the given packet
 pub fn get_max_ttl(packet: &IcmpResponce) -> u8 {
     let common = [64, 128, 255];
@@ -87,7 +80,7 @@ fn process_icmp(payload: &[u8], destination: Ipv4Addr) -> Result<(Ipv4Addr, u16,
 
 fn process_udp(payload: &[u8], destination: Ipv4Addr) -> Result<(Ipv4Addr, u16, u16), ()> {
     if let Some(udp) = UdpPacket::new(payload) {
-        let payload = udp.payload();
+        let _payload = udp.payload();
         // Use the stored id and seq on the source/destination port
         let id = udp.get_source();
         let seq = udp.get_destination();

@@ -25,7 +25,7 @@ struct TraceConfiguration {
     source: Ipv4Addr,
     max_hop: u8,
     current_ttl: u8,
-    traces: Vec<Option<Trace>>, //TODO: Check before overriding, as some ips (91.68.246.158) may send multiple packets
+    traces: Vec<Option<Trace>>,
 }
 
 #[derive(Debug, Clone)]
@@ -135,8 +135,8 @@ impl Anytrace {
                                 if !self.seen.contains(&Ipv4Addr::from(get_ip_mask(ip) | 0xFF)) {
                                     // We don't store the information, as this packet only verifies if
                                     // the host is online, and not execute the tracerote
-                                    self.handler.writer.send(ip);
-                                    end = false;
+                                    self.handler.writer.send(ip); // try_send or break
+                                    end = false; // move outside
                                 }
                             }
                         } else {
@@ -146,14 +146,15 @@ impl Anytrace {
                 }
                 if end && self.check.is_empty() {
                     if start
-                        + Duration::from_secs(self.handler.writer.sended_packets() / self.pps as u64)
-                        + Duration::from_secs(10) > Instant::now()
+                        + Duration::from_secs(
+                            self.handler.writer.sended_packets() / self.pps as u64,
+                        ) + Duration::from_secs(10) > Instant::now()
                     {
-                        info!("Waiting for writting to finish");
+                        debug!("Waiting for writting to finish");
                         use std::thread;
                         thread::sleep(Duration::from_secs(5));
                     } else {
-                        // Only end if its master, or the slave has a given runtime
+                        // Only end if its master, or the slave run time has ended
                         if self.master || self.starttime + self.runtime < Instant::now() {
                             break;
                         }
@@ -205,7 +206,6 @@ impl Anytrace {
                 }
             }
 
-            // TODO: Change rec_timeout break, as we arent counting packets that are not ours
             let mut last_update = time_from_epoch_ms();
             while let Ok(packet) = self.handler
                 .reader
@@ -258,7 +258,6 @@ impl Anytrace {
                 let (network, ttl) =
                     decode_id_seq_key(icmp.identifier, icmp.sequence_number, self.key);
                 if verify_packet_network(packet.source, network) {
-                    // TODO (Optional): use the packet time instead of the calculated for better accuracy
                     // Mark the router as measured and update the trace
                     self.seen.insert(packet.source);
                     self.seen
@@ -310,9 +309,15 @@ impl Anytrace {
                         if self.seen.contains(&packet.source) {
                             // Only skip if the last hop is not the same ip address, as some use the same router for more than one hop
                             let mut skip = true;
-                            if let Some(Some(upper)) = trace.traces.get((ttl as usize) + 1 - 1) {
-                                if upper.router == packet.source {
-                                    skip = false;
+                            for i in (ttl as usize + 1 - 1)..trace.traces.len() {
+                                if let Some(Some(upper)) = trace.traces.get(i) {
+                                    if upper.router == Ipv4Addr::new(0, 0, 0, 0) {
+                                        continue;
+                                    }
+                                    if upper.router == packet.source {
+                                        skip = false;
+                                    }
+                                    break;
                                 }
                             }
                             if skip {
@@ -350,7 +355,6 @@ impl Anytrace {
         icmp: &DestinationUnreachable,
     ) -> Result<(), ()> {
         // This is received from the UDP ping. the payload contains the inner UDP request and first two bytes of payload
-        // TODO: verify the packet without the signature to calculate the latency
         debug!(
             "Unreachable from {}, {:?}",
             packet.source,
@@ -510,7 +514,7 @@ fn update_trace_conf(
                 measurement.done = true;
                 return Ok(());
             } else {
-                error!(
+                info!(
                     "Duplicated answer from origin_target: {}, router: {}",
                     original_target, measurement.router
                 );
