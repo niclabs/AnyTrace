@@ -37,7 +37,7 @@ impl PingHandler {
         let (tx, rx) = match transport_channel(4096, protocol) {
             Ok((tx, rx)) => (tx, rx),
             Err(e) => panic!(
-                "An error occurred when creating the transport channel:
+                "An error occurred when creating the transport channel, check if the program have the CAP_NET_RAW capabilities or if you are running on root:
                             {}",
                 e
             ),

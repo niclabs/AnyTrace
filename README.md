@@ -1,5 +1,5 @@
 # AnyTrace
-AnyTrace is a tool used to detect the area of service of many anycast servers d$
+AnyTrace is a collection of tools used to detect the area of services of the servers on an anycast cloud.
 
 ## Running
 All the executables need root access to create the sockets and listen to the ICMP packets.
