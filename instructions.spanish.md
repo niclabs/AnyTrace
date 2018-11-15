@@ -27,10 +27,10 @@ Los parámetros de este programa son los siguientes:
 
 | Parametro | Descripción                                                                                                                                           |
 |-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
-| ip        | IP Anycast a medir                                                                                                                                    |
+| ip        | IP Anycast local a medir (fuente de los paquetes)                                                                                                     |
 | pps       | Paquetes por segundo a enviar (64 bytes o menos por paquete)                                                                                          |
 | method    | Método a medir (ICMP o UDP)                                                                                                                           |
-| duration  | [Seguidor] (Opcional) Tiempo aproximado de las pruebas (a una velocidad de 20.000pps (9.7MBit/s) toma un tiempo de 30 minutos sin contar tiempo de configuracion) |
+| duration  | [Seguidor] (Opcional) Tiempo aproximado de las pruebas (a una velocidad de 20.000pps (9.7MBit/s) toma un tiempo de 20 minutos sin contar tiempo de configuracion) |
 | hitlist   | [Maestro] Archivo con direcciones IP a medir                                                                                                          |
 | master    | [Maestro] Indica si debe ejecutarse como maestro                                                                                                      |
 
@@ -38,7 +38,7 @@ Los parámetros de este programa son los siguientes:
 Un seguidor debe ejecutarse de la siguiente manera:
 
 ```
-target/release/anytrace\
+./target/release/anytrace\
     --ip 190.124.27.10\
     --pps 20000\
     --method ICMP\
@@ -49,7 +49,7 @@ target/release/anytrace\
 El servidor maestro debe ejecutarse de la siguiente manera:
 
 ```
-target/release/anytrace\
+./target/release/anytrace\
     --ip 190.124.27.10\
     --pps 20000\
     --hitlist hitlistICMP.txt\
@@ -77,7 +77,7 @@ Para realizar las mediciones, se debe copiar el binario *anytrace* en todos los 
 
 En cada nodo seguidor se debe ejecutar *anytrace* como seguidor, y luego de tener todos los nodos en ejecución de se realiza la ejecución del nodo maestro.
 
-La dirección IP indicada debe pertenecer a la nube anycast, no siendo necesario utilizar una dirección en producción.
+La dirección IP indicada debe ser local y pertenecer a la nube anycast, no siendo necesario utilizar una dirección en producción.
 
 Para facilitar la ejecución, se incluyen los archivos *master.sh* y *follower.sh* con los argumentos necesarios, los cuales calculan el tiempo de ejecución según la cantidad de paquetes por segundo y una ventana de 20 minutos para configurar todos los nodos.
 
