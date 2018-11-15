@@ -38,24 +38,24 @@ Los parámetros de este programa son los siguientes:
 Un seguidor debe ejecutarse de la siguiente manera:
 
 ```
-./anytrace\
+target/release/anytrace\
     --ip 190.124.27.10\
     --pps 20000\
     --method ICMP\
     --duration 2400\
-    > result.csv
+    > resultICMP.csv
 ```
 
 El servidor maestro debe ejecutarse de la siguiente manera:
 
 ```
-./anytrace\
+target/release/anytrace\
     --ip 190.124.27.10\
     --pps 20000\
-    --hitlist hitlist.txt\
+    --hitlist hitlistICMP.txt\
     --method ICMP\
     --master\
-    > result.csv
+    > resultICMP.csv
 ```
 
 Estos comandos generaran el archivo result.csv con los resultados de las mediciones.
