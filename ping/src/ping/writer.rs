@@ -178,7 +178,7 @@ impl PingWriter {
                     time_ms: Self::time_from_epoch_ms(),
                 });
             }
-            Err(e) => debug!("failed to send packet {}: {}", request.target, e),
+            Err(e) => error!("failed to send packet to {}: {}", request.target, e),
         };
     }
 
@@ -221,7 +221,7 @@ impl PingWriter {
                     time_ms: Self::time_from_epoch_ms(),
                 });
             }
-            Err(e) => debug!("failed to send packet to {}: {}", request.target, e),
+            Err(e) => error!("failed to send packet to {}: {}", request.target, e),
         };
     }
 

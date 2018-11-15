@@ -21,7 +21,7 @@ sudo setcap CAP_NET_RAW+ep target/release/anytrace
 ## Ejecucion
 AnyTrace funciona en estructura Maestro/Seguidor, donde el servidor maestro realiza el envío de los paquetes iniciales, y los seguidores escuchan y procesan las respuestas. Los Seguidores deben ejecutarse antes del Maestro dado que este comienza el envío de forma inmediata. Todos los servidores a medir deben ejecutarse en modo seguidor, con excepción del nodo maestro, el cual actúa como maestro y seguidor a la vez.
 
-Es posible indicar (opcionalmente) el tiempo que deben ejecutarse los seguidores, donde como base, la ejecución completa de las pruebas toma 1.800 segundos a una velocidad de 20.000 paquetes por segundo en unicast, y debe agregarse el tiempo requerido para instalarse en otros nodos (Utilizar un tiempo mayor no afecta a las pruebas).
+Es posible indicar (opcionalmente) el tiempo que deben ejecutarse los seguidores, donde como base, la ejecución completa de las pruebas toma 1.800 segundos a una velocidad de 20.000 paquetes por segundo (9.7MBit/s) en unicast, y debe agregarse el tiempo requerido para instalarse en otros nodos (Utilizar un tiempo mayor no afecta a las pruebas).
 
 Los parámetros de este programa son los siguientes:
 
@@ -30,7 +30,7 @@ Los parámetros de este programa son los siguientes:
 | ip        | IP Anycast a medir                                                                                                                                    |
 | pps       | Paquetes por segundo a enviar (64 bytes o menos por paquete)                                                                                          |
 | method    | Método a medir (ICMP o UDP)                                                                                                                           |
-| duration  | [Seguidor] (Opcional) Tiempo aproximado de las pruebas (a una velocidad de 20.000pps toma un tiempo de 30 minutos sin contar tiempo de configuracion) |
+| duration  | [Seguidor] (Opcional) Tiempo aproximado de las pruebas (a una velocidad de 20.000pps (9.7MBit/s) toma un tiempo de 30 minutos sin contar tiempo de configuracion) |
 | hitlist   | [Maestro] Archivo con direcciones IP a medir                                                                                                          |
 | master    | [Maestro] Indica si debe ejecutarse como maestro                                                                                                      |
 
