@@ -1,8 +1,12 @@
 # AnyTrace
 AnyTrace es una colección de herramientas usada para detectar el área de servicio de diferentes servidores pertenecientes a una nube anycast.
 
-## Dependencias
-AnyTrace se encuentra programado en *Rust*, por lo que para compilarlo es necesario instalarlo. Las instrucciones para esto lo pueden encontrar en https://www.rust-lang.org/en-US/install.html
+El codigo más reciente lo puede encontrar en https://github.com/niclabs/AnyTrace
+
+## Dependencias para compilación
+AnyTrace se encuentra programado en *Rust*, por lo que para compilarlo es necesario instalar su compilador. Las instrucciones para esto lo pueden encontrar en https://www.rust-lang.org/en-US/install.html
+
+Rust genera ejecutables independientes, por lo que no es necesario instalar este en otra maquina más que la utilizada para compilar.
 
 ## Compilar
 Para Compilar AnyTrace, en la carpeta del repositorio debe ejecutar.
@@ -18,7 +22,7 @@ Dado que este programa escucha de manera directa los paquetes ICMP, este requier
 sudo setcap CAP_NET_RAW+ep target/release/anytrace
 ```
 
-## Ejecucion
+## Ejecución
 AnyTrace funciona en estructura Maestro/Seguidor, donde el servidor maestro realiza el envío de los paquetes iniciales, y los seguidores escuchan y procesan las respuestas. Los Seguidores deben ejecutarse antes del Maestro dado que este comienza el envío de forma inmediata. Todos los servidores a medir deben ejecutarse en modo seguidor, con excepción del nodo maestro, el cual actúa como maestro y seguidor a la vez.
 
 Es posible indicar (opcionalmente) el tiempo que deben ejecutarse los seguidores, donde como base, la ejecución completa de las pruebas toma 1.800 segundos a una velocidad de 20.000 paquetes por segundo (9.7MBit/s) en unicast, y debe agregarse el tiempo requerido para instalarse en otros nodos (Utilizar un tiempo mayor no afecta a las pruebas).
@@ -58,7 +62,7 @@ El servidor maestro debe ejecutarse de la siguiente manera:
     > resultICMP.csv
 ```
 
-Estos comandos generaran el archivo result.csv con los resultados de las mediciones.
+Estos comandos generaran el archivo resultICMP.csv con los resultados de las mediciones, capturado desde la salida estandar.
 
 ## Resultados
 
@@ -75,7 +79,7 @@ El código se separa en dos fuentes principales, *src/ping* y *src/anytrace*.
 
 Para realizar las mediciones, se debe copiar el binario *anytrace* en todos los nodos a medir, seleccionando uno con acceso a internet global como maestro, en el cual se debe incluir las listas *hitlistICMP.txt* y *hitlistUDP.txt*
 
-En cada nodo seguidor se debe ejecutar *anytrace* como seguidor, y luego de tener todos los nodos en ejecución de se realiza la ejecución del nodo maestro.
+En cada nodo seguidor se debe ejecutar *anytrace* como seguidor, y luego de tener todos los nodos en ejecución, se realiza la ejecución del nodo maestro.
 
 La dirección IP indicada debe ser local y pertenecer a la nube anycast, no siendo necesario utilizar una dirección en producción.
 
