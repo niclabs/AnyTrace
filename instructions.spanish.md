@@ -69,9 +69,9 @@ Estos comandos generaran el archivo resultICMP.csv con los resultados de las med
 Los resultados son expuestos por la salida estándar del programa, y pueden almacenarse localmente en los nodos. Cada uno de estos archivos poseen información sobre el área de servicio que ellos poseen de manera independiente.
 
 # Estructura de repositorio
-El código se separa en dos fuentes principales, *src/ping* y *src/anytrace*.
+El código se separa en dos fuentes principales, *ping/src* y *src/anytrace*.
 
-*src/ping* corresponde al código que se encarga de generar, enviar y recibir los paquetes ICMP a través de un socket unix, utilizando colas sobre la información.
+*ping/src* corresponde al código que se encarga de generar, enviar y recibir los paquetes ICMP a través de un socket unix, utilizando colas sobre la información.
 
 *src/anytrace* se encarga del procesamiento de los datos recibidos, enviando paquetes según la información capturada y generando los resultados.
 
