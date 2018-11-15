@@ -37,7 +37,7 @@ impl PingHandler {
         let (tx, rx) = match transport_channel(4096, protocol) {
             Ok((tx, rx)) => (tx, rx),
             Err(e) => panic!(
-                "An error occurred when creating the transport channel, check if the program is running as root or have the CAP_NET_RAW capabilities (sudo setcap CAP_NET_RAW+ep anytrace):
+                "An error occurred when creating the transport channel, check if the program is running as root or have the CAP_NET_RAW capabilities (sudo setcap CAP_NET_RAW+ep target/release/anytrace):
                             {}",
                 e
             ),
