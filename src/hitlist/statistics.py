@@ -15,8 +15,7 @@ class Statistics():
 
         self.asn_len= len(self.data)
         ip_file = open(sfile)
-        self.ips= [x.strip() for x in ip_file]
-        #self.ips =[ipaddress.ip_address(x.strip()) for x in ip_file] 
+        self.ips= [x.strip() for x in ip_file] 
         self.asns=[]
         self.initAsn()
         self.trie= pytricia.PyTricia()
@@ -86,6 +85,30 @@ class Statistics():
             if  a.found:
                 for net in a.networks:
                     f.write(net +"\n")
+            
+    def find_blacklist(self):
+        '''
+        creates a file with all the networks which should not be pinged
+        due to privacy matters, or ping-blocking policy
+        '''
+        for ip in self.ips:
+            node= self.trie.get_key(ip)
+            if(node!=None):
+                trie.delete(node)
+        #once all the ips are checked, the black list is created
+        #iterate over the patricia trie and remove  every leaf nodes
+        for prefix in self.trie:
+            if trie.parent(prefix)==None:
+                continue
+            else
+                trie.delete(prefix)
+        blacklist= trie.keys()
+        f = open("results/blacklist.txt", "w+")
+        for net in blacklist:
+            f.write(net +"\n")
+
+
+
 
 class ASN_number():
     def __init__(self, id, netlist):
@@ -118,6 +141,9 @@ class ASN_number():
 if __name__ == '__main__':
     method =sys.argv[1]
     stat= Statistics("data/asn_prefixes.json", 'archivo2')
-    map ={ "coverage": stat.asn_partial_coverage() , "dead_asn":stat.dead_asn(),
-    "alive_asn":  stat.alive_asn() , "dead_networks": stat.dead_networks() , "alive_networks":  stat.alive_networks() }  
+    stat.asn_partial_coverage()
+    map ={ "dead_asn":stat.dead_asn(),
+    "alive_asn":  stat.alive_asn() ,
+    "dead_networks": stat.dead_networks() ,
+    "alive_networks":  stat.alive_networks() }  
     map[method]
