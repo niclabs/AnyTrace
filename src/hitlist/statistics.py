@@ -91,19 +91,23 @@ class Statistics():
         creates a file with all the networks which should not be pinged
         due to privacy matters, or ping-blocking policy
         '''
+        self.trie.delete("0.0.0.0/0")
         for ip in self.ips:
             node= self.trie.get_key(ip)
             if(node!=None):
-                trie.delete(node)
+                self.trie.delete(node)
         #once all the ips are checked, the black list is created
         #iterate over the patricia trie and remove  every leaf nodes
+        deleted=0
+        length=0
         for prefix in self.trie:
-            if trie.parent(prefix)==None:
+            if self.trie.parent(prefix)==None:
                 continue
-            else
-                trie.delete(prefix)
-        blacklist= trie.keys()
-        f = open("results/blacklist.txt", "w+")
+            else:
+                self.trie.delete(prefix)
+      
+        blacklist= self.trie.keys()
+        f = open("data/blacklist.txt", "w+")
         for net in blacklist:
             f.write(net +"\n")
 
@@ -140,10 +144,12 @@ class ASN_number():
        
 if __name__ == '__main__':
     method =sys.argv[1]
-    stat= Statistics("data/asn_prefixes.json", 'archivo2')
+    stat= Statistics("data/asn_prefixes.json", 'archivo_refresh3')
     stat.asn_partial_coverage()
-    map ={ "dead_asn":stat.dead_asn(),
+    map ={ 
+    "dead_asn":stat.dead_asn(),
     "alive_asn":  stat.alive_asn() ,
     "dead_networks": stat.dead_networks() ,
-    "alive_networks":  stat.alive_networks() }  
+    "alive_networks":  stat.alive_networks(),
+    "blacklist": stat.find_blacklist() }  
     map[method]
