@@ -51,7 +51,7 @@ class Statistics():
         for asn in self.asns:
             if asn.found:
                 alive+=1
-        f=open("results/partialcoverage.txt", "w+")
+        f=open("data/partialcoverage.txt", "w+")
         coverage=alive*100/self.asn_len
         f.write("asn found/ total asns = " + str(coverage))
 
@@ -60,32 +60,33 @@ class Statistics():
         this is a prediction parameter based on responsiveness to ping
         and must be corroborated'''
 
-        f = open("results/dead_Asns.txt", "w+")
+        f = open("data/dead_Asns.txt", "w+")
         for a in self.asns:
             if not a.found:
                 f.write(a.number +"\n")
 
     def alive_asn(self):
         ''' returns a file with those Asn currently found alive'''
-        f = open("results/alive_Asns.txt", "w+")
+        f = open("data/alive_Asns.txt", "w+")
         for a in self.asns:
             if a.found:
                 f.write(a.number+"\n")
 
     def dead_networks(self):
-        f = open("results/dead_Networks.txt", "w+")
+        f = open("data/dead_Networks.txt", "w+")
         for a in self.asns:
             if not a.found:
                 for net in a.networks:
                     f.write(net +"\n")
 
     def alive_networks(self):
-        f = open("results/alive_Networks.txt", "w+")
+        f = open("data/alive_Networks.txt", "w+")
         for a in self.asns:
             if  a.found:
                 for net in a.networks:
                     f.write(net +"\n")
-            
+
+    #TODO compressing two networks in blacklist into 1 networks with another mask    
     def find_blacklist(self):
         '''
         creates a file with all the networks which should not be pinged
@@ -97,9 +98,6 @@ class Statistics():
             if(node!=None):
                 self.trie.delete(node)    
                 while(self.trie.get_key(node)!=None):
-                    #parent=self.trie.get_key(node)
-                    #self.trie.delete(parent)
-                    #node= parent
                     match=self.trie.get_key(node)
                     self.trie.delete(match)
 
@@ -122,9 +120,6 @@ class Statistics():
             if self.trie.get_key(ip)!= None:
                 print("bugg found")
         
-
-
-
 
 
 class ASN_number():
@@ -157,6 +152,8 @@ class ASN_number():
        
 if __name__ == '__main__':
     method =sys.argv[1]
+    Asns = sys.argv[2]
+    rfile =sys.argv[3]
     stat= Statistics("data/asn_prefixes.json", 'archivo_refresh3')
     stat.asn_partial_coverage()
     map ={ 
