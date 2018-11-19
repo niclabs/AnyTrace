@@ -95,7 +95,14 @@ class Statistics():
         for ip in self.ips:
             node= self.trie.get_key(ip)
             if(node!=None):
-                self.trie.delete(node)
+                self.trie.delete(node)    
+                while(self.trie.get_key(node)!=None):
+                    #parent=self.trie.get_key(node)
+                    #self.trie.delete(parent)
+                    #node= parent
+                    match=self.trie.get_key(node)
+                    self.trie.delete(match)
+
         #once all the ips are checked, the black list is created
         #iterate over the patricia trie and remove  every leaf nodes
         deleted=0
@@ -110,6 +117,12 @@ class Statistics():
         f = open("data/blacklist.txt", "w+")
         for net in blacklist:
             f.write(net +"\n")
+
+        for ip in self.ips:
+            if self.trie.get_key(ip)!= None:
+                print("bugg found")
+        
+
 
 
 
