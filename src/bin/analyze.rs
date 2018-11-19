@@ -10,7 +10,8 @@ fn main() {
     let methods = [
         ("join", Steps::JoinData),
         ("testing", Steps::Testing),
-        ("distance", Steps::DistanceMatrix)
+        ("distance", Steps::DistanceMatrix),
+        ("paths", Steps::Paths),
     ];
     env_logger::init();
     let args: Vec<String> = env::args().collect();

@@ -36,6 +36,9 @@ pub fn load_data() -> HashMap<Ipv4Addr, Measurement> {
     let mut map: HashMap<Ipv4Addr, Measurement> = HashMap::new();
     let stdin = stdin();
     let stdin = stdin.lock();
+
+    use std::collections::HashSet;
+    let mut deg = HashSet::new();
     for line in stdin.lines() {
         let line = line.unwrap();
         let data = line.split(",").collect::<Vec<&str>>();
@@ -44,7 +47,18 @@ pub fn load_data() -> HashMap<Ipv4Addr, Measurement> {
         let hops: u8 = data[2].parse().unwrap();
         let ms: u64 = data[3].parse().unwrap();
 
-        match map.entry(real_dst) {
+        // Filter private ip addresses
+        if dst.is_private() {
+            continue;
+        }
+        if hops > 20 {
+            continue;
+        }
+        if hops == 3 {// 2=NIC Router(bgp=0), 3=
+            deg.insert(dst);
+        }
+
+        match map.entry(real_dst) { // TODO: Revisar hops/orden 
             Entry::Occupied(mut o) => {
                 let m = o.get_mut();
                 while m.data.len() <= hops.saturating_sub(1) as usize {
@@ -66,6 +80,7 @@ pub fn load_data() -> HashMap<Ipv4Addr, Measurement> {
             }
         }
     }
+    println!("{:?}", deg);
     return map;
 }
 
