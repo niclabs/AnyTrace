@@ -2,20 +2,17 @@
 AnyTrace is a collection of tools used to detect the area of services of the servers on an anycast cloud.
 
 ## Running
-All the executables need root access to create the sockets and listen to the ICMP packets.
+To run this program, you must have root access or use setcap to add the CAP_NET_RAW capability to the binary
 
-To run the example:
+To run anytrace and generate the trace information, you must run:
 ```
-cargo run --bin example
-```
-To generate the ip hitlist:
-```
-cargo run --bin hitlist
+cargo build --release
+./target/release/anytrace\
+    --ip xxx.xxx.xxx.xxx\
+    --pps 20000\
+    --method ICMP\
+    --duration 2400\
+    > resultICMP.csv
 ```
 
-## Setcap
-To set the capabilities of the generated binary, and not use root, you have to use the following command
-
-```
-sudo setcap CAP_NET_RAW+ep anytrace
-```
+More detailed instructions can be found (in spanish) at [instructions.spanish.md](instructions.spanish.md)
