@@ -103,11 +103,6 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>
                 continue;
             }
 
-            // verify if actual network is in blacklist
-            let node_match_op = blist_trie.get_ancestor(key);
-            if node_match_op.is_some() {
-                 continue;
-            }
 
             // todo let mut cnt= 0 cnt ++ si cnt > rate terminar
             if let Err(_) = ratelimit.check() {
@@ -115,18 +110,41 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>
                 break;
             }
 
-            mybreak = false;
-            let ip_network = value.borrow().address.clone();
-            //reading thread created
-            let i = value.borrow().current_ip.clone();
-            let ip = ip_network.from(&value.borrow().current_ip, &ip_network.prefix);
-            let last = ip_network.last();
-            hdrs::write_alive_ip(&ip, &wr_handler);
-            //let pile = pile + 1;
-            if ip == last {
-                value.borrow_mut().last = true;
+
+            // verify if actual network is in blacklist
+            let node_match_op = blist_trie.get_ancestor(key);
+            if node_match_op.is_some() {
+                 continue;
             }
-            value.borrow_mut().current_ip = i.add(BigUint::one());
+
+
+            mybreak = false;
+            let mut it =0;
+            while it< value.borrow().sent{
+                let ip_network = value.borrow().address.clone();
+                let i = value.borrow().current_ip.clone();
+                let ip = ip_network.from(&value.borrow().current_ip, &ip_network.prefix);
+
+                // verify if  ip is in blacklist
+                let node_match_op = blist_trie.get_ancestor(&hdrs::net_to_vector(&ip));
+                if node_match_op.is_some() {
+                    value.borrow_mut().current_ip = i.add(BigUint::one());
+                    it+=1;
+                    continue;
+                }
+                else
+                {
+                    let last = ip_network.last();
+                    hdrs::write_alive_ip(&ip, &wr_handler);
+                    if ip == last {
+                        value.borrow_mut().last = true;
+                        break;
+                    }
+                    value.borrow_mut().current_ip = i.add(BigUint::one());
+                    it+=1;
+                }
+            }
+            value.borrow_mut().sent +=1;
         }
 
         // if an ip was received within the network
@@ -150,13 +168,6 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>
                         let value = node.value().unwrap();
                         //let state = value.borrow().state.clone();
                         let network_add = value.borrow().address.clone();
-                        // verify if the network matching isnt 0.0.0.0 (universe)
-                        if network_add == hdrs::str_to_ip(&"0.0.0.0/0") {
-                            //remove 0.0.0.0
-                            remove = true;
-                            break;
-                        }
-                        //if state { break;}
                         if network_add.includes(&ip_received) {
                             remove = true;
                             if first {
@@ -183,4 +194,17 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>
         }
         // if all true break
     }
+}
+#[test]
+// this tests verifies blacklist functionality
+fn test1(){
+    let mut vec = vec![
+        String::from("0.0.0.0/0"),
+        String::from("223.255.235.0/24"),
+    ];
+
+    //"0.0.0.55"
+
+
+
 }

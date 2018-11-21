@@ -85,6 +85,10 @@ pub fn create_trie(vec: &mut Vec<String>) -> Trie<Vec<u8>, RefCell<network_state
     let mut trie = Trie::new();
     while vec.len() > 0 {
         let net = vec.pop().unwrap();
+        if(net== "0.0.0.0/0") 
+        {   debug!("removed 0.0.0.0");
+            continue;
+        }
         let ip_net = str_to_ip(&net);
         let bit_vec = net_to_vector(&ip_net);
         let host_address = ip_net.network().host_address;
