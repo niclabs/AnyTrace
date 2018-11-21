@@ -152,8 +152,8 @@ class ASN_number():
        
 if __name__ == '__main__':
     method =sys.argv[1]
-    Asns = sys.argv[2]
-    rfile =sys.argv[3]
+    #Asns = sys.argv[2]
+    #rfile =sys.argv[3]
     stat= Statistics("data/asn_prefixes.json", 'archivo_refresh3')
     stat.asn_partial_coverage()
     map ={ 

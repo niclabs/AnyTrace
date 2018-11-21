@@ -70,7 +70,7 @@ pub fn refresh_file()
 
     //reading ip file into a vector
 
-    let f = File::open("archivo2").unwrap();
+    let f = File::open("archivo").unwrap();
     let file = BufReader::new(&f);
     let mut data = Vec::new();
     for (num, line) in file.lines().enumerate() {
@@ -155,18 +155,27 @@ pub fn refresh_file()
             let mut it =0;
             while it< value.borrow().sent{
                 let ip_network = value.borrow().address.clone();
-                //reading thread created
                 let i = value.borrow().current_ip.clone();
                 let ip = ip_network.from(&value.borrow().current_ip, &ip_network.prefix);
-                let last = ip_network.last();
-                hdrs::write_alive_ip(&ip, &wr_handler);
-                //let pile = pile + 1;
-                if ip == last {
-                    value.borrow_mut().last = true;
-                    break;
+
+                // verify if  ip is in blacklist
+                let node_match_op = blist_trie.get_ancestor(&hdrs::net_to_vector(&ip));
+                if node_match_op.is_some() {
+                    value.borrow_mut().current_ip = i.add(BigUint::one());
+                    it+=1;
+                    continue;
                 }
-                value.borrow_mut().current_ip = i.add(BigUint::one());
-                it+=1;
+                else
+                {
+                    let last = ip_network.last();
+                    hdrs::write_alive_ip(&ip, &wr_handler);
+                    if ip == last {
+                        value.borrow_mut().last = true;
+                        break;
+                    }
+                    value.borrow_mut().current_ip = i.add(BigUint::one());
+                    it+=1;
+                }
             }
             value.borrow_mut().sent +=1;
         }
@@ -204,12 +213,6 @@ pub fn refresh_trie(trie: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>, rece
                             let value = node.value().unwrap();
                             let network_add = value.borrow().address.clone();
 
-                            // verify if the network matching isnt 0.0.0.0 (universe)
-                            if network_add == hdrs::str_to_ip(&"0.0.0.0/0") {
-                                //remove 0.0.0.0
-                                remove= true;
-                                break;
-                            }
                             if network_add.includes(&ip_received) {
                                 remove = true;
                                 if first {
