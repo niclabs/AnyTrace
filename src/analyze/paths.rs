@@ -1,4 +1,4 @@
-use analyze::helper::{load_asn, load_data};
+use analyze::helper::{load_asn, load_data, asn_geoloc};
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
@@ -62,18 +62,15 @@ fn generate_asmap(tracepath: String, asnpath: String) -> HashMap<u32, Vec<AsPath
         let asn = load_asn(asnpath);
         let graph = generate_router_graph(tracepath);
         for (src, destinations) in graph.iter() {
-            let sip = *src;
             if let Some((_, _, src)) = asn.longest_match(*src) {
                 for dst in destinations.iter() {
                     let dist = dst.dt;
-                    let dip = dst.ip;
                     if let Some((_, _, dst)) = asn.longest_match(dst.ip) {
                         for src in src.iter() {
                             for dst in dst.iter() {
                                 if src == dst {
                                     continue;
                                 }
-                                //println!("{} ({}) -> {} ({})",sip, src,dip, dst);
                                 // Insert the forward path
                                 let node = AsPath {
                                     asn: *dst,
@@ -163,20 +160,43 @@ fn dijkstra_as(graph: &HashMap<u32, Vec<AsPath>>, start: u32) -> HashMap<u32, u3
     return distance;
 }
 
+fn bucket_as(distance: &HashMap<u32, u32>, origin: u32, asnpath: String) {
+    let geo = asn_geoloc(asnpath);
+    let mut result = HashMap::new();
+    for (asn, dist) in distance.iter() {
+        if let Some(geodata) = geo.get(asn) {
+            let data = result.entry(dist).or_insert(HashMap::<String, u32>::new());
+            for loc in geodata {
+                let mut item = data.entry(loc.country.clone()).or_insert(0);
+                *item += 1;
+            }
+        }
+    }
+    
+    let mut x = 0;
+    while let Some(data) = result.get(&x) {
+        let mut loc = data.iter().collect::<Vec<(&String,&u32)>>();
+        loc.sort_by_key(|(_,c)| u32::MAX - *c);
+        info!("Locations len {}: {:?}", x, loc);
+        x += 1;
+    }
+}
+
 pub fn check_paths() {
     let arguments = env::args().collect::<Vec<String>>();
     if arguments.len() < 4 {
         panic!("Argments: <traces.csv> <asn.csv>");
-    }
-    
+    }    
     let tracepath = arguments[2].clone();
     let asnpath = arguments[3].clone();
 
-    let graph = generate_asmap(tracepath, asnpath);
+    let graph = generate_asmap(tracepath, asnpath.clone());
     let base = dijkstra_as(&graph, 27678);
-    //info!("c {:?}", base.iter().filter(|(_, y)| **y == 2).map(|(x,_)| *x).collect::<Vec<u32>>());
+    bucket_as(&base, 27678, asnpath);
+
     info!("max dist: {:?}", base.iter().max_by_key(|(_, x)| *x));
     info!("Distance from {}: {:?}", 27978, base.get(&27978));
+
     let mut x = 0;
     loop {
         let count = base.iter().filter(|(_, y)| **y == x).count();
@@ -187,3 +207,7 @@ pub fn check_paths() {
         x += 1;
     }
 }
+
+// Ahora: Teorizar efecto de poner un nodo en algun punto. 
+//        Colocar distancias entre los AS (?)
+//        Geolocalizar ASN
