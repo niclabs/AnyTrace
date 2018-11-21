@@ -142,18 +142,21 @@ pub fn refresh_file()
             }
             // verify if actual network is in blacklist
             let node_match_op = blist_trie.get_ancestor(key);
+
             if node_match_op.is_some() {
-                 continue;
+                value.borrow_mut().last = true;
+                continue;
             }
-            // todo let mut cnt= 0 cnt ++ si cnt > rate terminar
-            if let Err(_) = ratelimit.check() {
-                mybreak = false;
-                break;
-            }
-            
+           
             mybreak = false;
             let mut it =0;
             while it< value.borrow().sent{
+              
+                if let Err(_) = ratelimit.check() {
+                    mybreak = false;
+                    break;
+                }
+            
                 let ip_network = value.borrow().address.clone();
                 let i = value.borrow().current_ip.clone();
                 let ip = ip_network.from(&value.borrow().current_ip, &ip_network.prefix);

@@ -97,30 +97,30 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>
     //let mut pile = 0u32;
     loop {
         let mut mybreak = true;
-
+        debug!("sending");
         for (key, value) in networks.iter() {
             if value.borrow().last {
                 continue;
             }
 
 
-            // todo let mut cnt= 0 cnt ++ si cnt > rate terminar
-            if let Err(_) = ratelimit.check() {
-                mybreak = false;
-                break;
-            }
-
-
             // verify if actual network is in blacklist
             let node_match_op = blist_trie.get_ancestor(key);
             if node_match_op.is_some() {
-                 continue;
+                value.borrow_mut().last = true;
+                continue;
             }
 
 
             mybreak = false;
             let mut it =0;
             while it< value.borrow().sent{
+                   
+                if let Err(_) = ratelimit.check() {
+                    mybreak = false;
+                    break;
+                }
+
                 let ip_network = value.borrow().address.clone();
                 let i = value.borrow().current_ip.clone();
                 let ip = ip_network.from(&value.borrow().current_ip, &ip_network.prefix);
@@ -149,7 +149,7 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>
 
         // if an ip was received within the network
         // rewrite the map
-
+        debug!("receiving");
         while let Ok(ip_received) = receiver.recv_timeout(Duration::from_millis(200)) {
             //let pile = pile.saturating_sub(1);
             let vec = hdrs::net_to_vector(&ip_received);
@@ -194,17 +194,4 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>
         }
         // if all true break
     }
-}
-#[test]
-// this tests verifies blacklist functionality
-fn test1(){
-    let mut vec = vec![
-        String::from("0.0.0.0/0"),
-        String::from("223.255.235.0/24"),
-    ];
-
-    //"0.0.0.55"
-
-
-
 }

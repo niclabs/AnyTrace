@@ -128,7 +128,6 @@ class ASN_number():
         # will be true
         self.found= False
         self.number= id
-        # self.networks= [ipaddress.ip_network(i) for i in netlist]
         self.networks = netlist
 
     def remove_nodes(self, trie):
@@ -152,9 +151,10 @@ class ASN_number():
        
 if __name__ == '__main__':
     method =sys.argv[1]
-    #Asns = sys.argv[2]
-    #rfile =sys.argv[3]
-    stat= Statistics("data/asn_prefixes.json", 'archivo_refresh3')
+    Asns = sys.argv[2]
+    rfile =sys.argv[3]
+    stat= Statistics(Asns, rfile)
+    #stat= Statistics("data/asn_prefixes.json", 'archivo_refresh3')
     stat.asn_partial_coverage()
     map ={ 
     "dead_asn":stat.dead_asn(),

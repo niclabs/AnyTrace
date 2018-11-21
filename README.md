@@ -43,19 +43,19 @@ To generate a blacklist of networks that should not be pingged a python code is 
 - a folder named data with the ASN .json file should be created inside the root folder
 
 ```
-pyhon3 statistics.py blacklist
+pyhon3 src/hitlist/statistics.py blacklist < path_to_json_file > < path_file_generated_by_hitlist >
 ```
 
 - by running statistics.py a file named partial_coverage will be generated,  with the percentage of ASNs with at least
 1 network alive, over the total of ASNs
 
-- other statistcs can be obtained by runninv
+- other statistcs can be obtained by running
 
 ```
-pyhon3 statistics.py < stat name >
+pyhon3 src/hitlist/statistics.py < stat name > < path1 > < path2 >
 ```
 - where stat name:
     - `dead_asn`
     - `alive_asn`
-    - `dead_networks"`
+    - `dead_networks`
     - `alive_networks`
