@@ -1,6 +1,7 @@
 extern crate treebitmap;
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::collections::hash_map::Entry;
 use std::fs::File;
 use std::io::stdin;
@@ -31,15 +32,12 @@ impl Measurement {
     }
 }
 
-pub fn load_data() -> HashMap<Ipv4Addr, Measurement> {
-    debug!("Loading data from stdin");
+pub fn load_data(tracepath: String) -> HashMap<Ipv4Addr, Measurement> {
+    debug!("Loading data from {}", tracepath);
     let mut map: HashMap<Ipv4Addr, Measurement> = HashMap::new();
-    let stdin = stdin();
-    let stdin = stdin.lock();
+    let f = File::open(tracepath).unwrap();    
 
-    use std::collections::HashSet;
-    let mut deg = HashSet::new();
-    for line in stdin.lines() {
+    for line in BufReader::new(f).lines() {
         let line = line.unwrap();
         let data = line.split(",").collect::<Vec<&str>>();
         let real_dst: Ipv4Addr = data[0].parse().unwrap();
@@ -50,13 +48,6 @@ pub fn load_data() -> HashMap<Ipv4Addr, Measurement> {
         // Filter private ip addresses
         if dst.is_private() {
             continue;
-        }
-        if hops > 20 {
-            continue;
-        }
-        if hops == 3 {
-            // 2=NIC Router(bgp=0), 3=
-            deg.insert(dst);
         }
 
         match map.entry(real_dst) {
@@ -82,15 +73,14 @@ pub fn load_data() -> HashMap<Ipv4Addr, Measurement> {
             }
         }
     }
-    //info!("{:?}, {}", map.len(), map.iter().map(|(_,y)| y.data.len()).sum::<usize>());
+
     return map;
 }
 
-pub fn load_asn() -> IpLookupTable<Ipv4Addr, Vec<u32>> {
-    debug!("Loading asn");
+pub fn load_asn(asnpath: String) -> IpLookupTable<Ipv4Addr, Vec<u32>> {
+    debug!("Loading asn from {}", asnpath);
     let mut tbl: IpLookupTable<Ipv4Addr, Vec<u32>> = IpLookupTable::new();
-    let filename = "data/bgp.csv";
-    let f = File::open(filename).unwrap();
+    let f = File::open(asnpath).unwrap();
     for line in BufReader::new(f).lines() {
         let line = line.unwrap();
         let line = line.replace("{", "").replace("}", "");

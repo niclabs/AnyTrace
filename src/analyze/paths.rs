@@ -3,6 +3,7 @@ use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::env;
 use std::net::Ipv4Addr;
 use std::u32;
 
@@ -18,9 +19,9 @@ struct TraceNode {
     dt: u32,
 }
 
-fn generate_router_graph() -> HashMap<Ipv4Addr, Vec<TraceNode>> {
+fn generate_router_graph(tracepath: String) -> HashMap<Ipv4Addr, Vec<TraceNode>> {
     let mut result: HashMap<Ipv4Addr, Vec<TraceNode>> = HashMap::default();
-    let data = load_data();
+    let data = load_data(tracepath);
     debug!("Generating router graph");
     for (_, measurement) in data.iter() {
         let data = &measurement.data;
@@ -55,11 +56,11 @@ fn generate_router_graph() -> HashMap<Ipv4Addr, Vec<TraceNode>> {
     return result;
 }
 
-fn generate_asmap() -> HashMap<u32, Vec<AsPath>> {
+fn generate_asmap(tracepath: String, asnpath: String) -> HashMap<u32, Vec<AsPath>> {
     let mut result: HashMap<u32, Vec<AsPath>> = HashMap::default();
     {
-        let asn = load_asn();
-        let graph = generate_router_graph();
+        let asn = load_asn(asnpath);
+        let graph = generate_router_graph(tracepath);
         for (src, destinations) in graph.iter() {
             let sip = *src;
             if let Some((_, _, src)) = asn.longest_match(*src) {
@@ -163,22 +164,16 @@ fn dijkstra_as(graph: &HashMap<u32, Vec<AsPath>>, start: u32) -> HashMap<u32, u3
 }
 
 pub fn check_paths() {
-    let graph = generate_asmap();
+    let arguments = env::args().collect::<Vec<String>>();
+    if arguments.len() < 4 {
+        panic!("Argments: <traces.csv> <asn.csv>");
+    }
+    
+    let tracepath = arguments[2].clone();
+    let asnpath = arguments[3].clone();
+
+    let graph = generate_asmap(tracepath, asnpath);
     let base = dijkstra_as(&graph, 27678);
-    info!(
-        "a {:?}",
-        base.iter()
-            .filter(|(_, y)| **y == 0)
-            .map(|(x, _)| *x)
-            .collect::<Vec<u32>>()
-    );
-    info!(
-        "b {:?}",
-        base.iter()
-            .filter(|(_, y)| **y == 1)
-            .map(|(x, _)| *x)
-            .collect::<Vec<u32>>()
-    );
     //info!("c {:?}", base.iter().filter(|(_, y)| **y == 2).map(|(x,_)| *x).collect::<Vec<u32>>());
     info!("max dist: {:?}", base.iter().max_by_key(|(_, x)| *x));
     info!("Distance from {}: {:?}", 27978, base.get(&27978));
