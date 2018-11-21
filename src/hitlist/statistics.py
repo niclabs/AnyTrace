@@ -154,12 +154,6 @@ if __name__ == '__main__':
     Asns = sys.argv[2]
     rfile =sys.argv[3]
     stat= Statistics(Asns, rfile)
-    #stat= Statistics("data/asn_prefixes.json", 'archivo_refresh3')
     stat.asn_partial_coverage()
-    map ={ 
-    "dead_asn":stat.dead_asn(),
-    "alive_asn":  stat.alive_asn() ,
-    "dead_networks": stat.dead_networks() ,
-    "alive_networks":  stat.alive_networks(),
-    "blacklist": stat.find_blacklist() }  
+    map = {"dead_asn": stat.dead_asn(),"alive_asn":  stat.alive_asn() ,"dead_networks": stat.dead_networks(),"alive_networks":  stat.alive_networks(),"blacklist": stat.find_blacklist()}  
     map[method]

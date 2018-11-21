@@ -14,8 +14,15 @@ cargo run --bin hitlist
 ```
 
 # Hitlist
-hitlist is a program that generates a file of alive ips.
-To run hitlist a .json file with the current ASNs registered is required.
+hitlist is a program that generates a file of alive ips.  
+To run hitlist a file named **asn_prefixes.json** with the current ASNs registered is required.  
+**asn_prefixes.json** must be within a directory named **data** within the root folder.  
+The structure of the json file must be the following:  
+- {asn1: [network1, netwok2 ...], asn2 :[network1, network2, ...]}  
+
+for example:  
+- {"42708": ["0.0.0.0/0", "5.198.248.0/21"]}
+
 
 ## Running hitlist
 running with debbuging options are recommended. The user must be positioned in the hitlist folder.
@@ -23,14 +30,14 @@ running with debbuging options are recommended. The user must be positioned in t
 - to run hitlist :
 
 ```
-cargo build && sudo RUST_LOG=DEBUG RUST_BACKTRACE=1 ./target/debug/hitlist > filename
+cargo build && sudo RUST_LOG=DEBUG ./target/debug/hitlist > filename
 
 ```
 
 - to refresh the file
 
 ```
-cargo build && sudo RUST_LOG=DEBUG RUST_BACKTRACE=1 ./target/debug/hitlist/refresh > filename
+cargo build && sudo RUST_LOG=DEBUG ./target/debug/hitlist/refresh > filename
 
 ```
 
@@ -40,19 +47,18 @@ To generate a blacklist of networks that should not be pingged a python code is 
 ## Running 
 
 - the user must be in the root folder
-- a folder named data with the ASN .json file should be created inside the root folder
 
 ```
-pyhon3 src/hitlist/statistics.py blacklist < path_to_json_file > < path_file_generated_by_hitlist >
+pyhon3 src/hitlist/statistics.py blacklist <path_to_json_file> <path_file_generated_by_hitlist>
 ```
 
-- by running statistics.py a file named partial_coverage will be generated,  with the percentage of ASNs with at least
+- by running statistics.py a file named **partial_coverage.txt** will be generated,  with the percentage of ASNs with at least
 1 network alive, over the total of ASNs
 
 - other statistcs can be obtained by running
 
 ```
-pyhon3 src/hitlist/statistics.py < stat name > < path1 > < path2 >
+pyhon3 src/hitlist/statistics.py <stat name> <path1> <path2>
 ```
 - where stat name:
     - `dead_asn`
