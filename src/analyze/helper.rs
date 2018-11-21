@@ -54,11 +54,13 @@ pub fn load_data() -> HashMap<Ipv4Addr, Measurement> {
         if hops > 20 {
             continue;
         }
-        if hops == 3 {// 2=NIC Router(bgp=0), 3=
+        if hops == 3 {
+            // 2=NIC Router(bgp=0), 3=
             deg.insert(dst);
         }
 
-        match map.entry(real_dst) { // TODO: Revisar hops/orden 
+        match map.entry(real_dst) {
+            // TODO: Revisar hops/orden
             Entry::Occupied(mut o) => {
                 let m = o.get_mut();
                 while m.data.len() <= hops.saturating_sub(1) as usize {
@@ -80,13 +82,13 @@ pub fn load_data() -> HashMap<Ipv4Addr, Measurement> {
             }
         }
     }
-    println!("{:?}", deg);
+    //info!("{:?}, {}", map.len(), map.iter().map(|(_,y)| y.data.len()).sum::<usize>());
     return map;
 }
 
 pub fn load_asn() -> IpLookupTable<Ipv4Addr, Vec<u32>> {
     debug!("Loading asn");
-    let mut tbl : IpLookupTable<Ipv4Addr, Vec<u32>> = IpLookupTable::new();
+    let mut tbl: IpLookupTable<Ipv4Addr, Vec<u32>> = IpLookupTable::new();
     let filename = "data/bgp.csv";
     let f = File::open(filename).unwrap();
     for line in BufReader::new(f).lines() {
@@ -97,11 +99,7 @@ pub fn load_asn() -> IpLookupTable<Ipv4Addr, Vec<u32>> {
         // store something about the length, or calculate manually.
         if let Ok(ip) = network[0].parse::<Ipv4Addr>() {
             for asn in data[1..].iter() {
-                tbl.insert(
-                    ip,
-                    network[1].parse().unwrap(),
-                    vec!(asn.parse().unwrap()),
-                );
+                tbl.insert(ip, network[1].parse().unwrap(), vec![asn.parse().unwrap()]);
                 break;
             }
         }

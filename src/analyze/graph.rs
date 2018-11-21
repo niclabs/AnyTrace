@@ -1,18 +1,16 @@
 extern crate rayon;
 //TODO: Change HashMap for FnvHashMap
+use self::rayon::prelude::*;
 use analyze::helper::{load_asn, load_data};
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::collections::hash_map::Entry;
 use std::collections::VecDeque;
+use std::collections::hash_map::Entry;
 use std::net::Ipv4Addr;
-use self::rayon::prelude::*;
 
-
-use std::u32;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex};
-
+use std::u32;
 
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
 struct Node {
@@ -21,7 +19,7 @@ struct Node {
 }
 
 fn generate_router_graph() -> HashMap<Ipv4Addr, HashSet<Node>> {
-    let mut result : HashMap<Ipv4Addr, HashSet<Node>> = HashMap::new();
+    let mut result: HashMap<Ipv4Addr, HashSet<Node>> = HashMap::new();
     let data = load_data();
     debug!("Generating router graph");
     for (_, measurement) in data.iter() {
@@ -32,7 +30,10 @@ fn generate_router_graph() -> HashMap<Ipv4Addr, HashSet<Node>> {
                 if let Some(origin) = &data[i] {
                     if origin.ms.saturating_sub(destination.ms) as u32 == 0 {
                         if destination.ms.saturating_sub(origin.ms) as u32 != 0 {
-                            println!("Inconsistent, {} ({}) vs {} ({})", origin.ms, origin.hops, destination.ms, destination.hops);
+                            println!(
+                                "Inconsistent, {} ({}) vs {} ({})",
+                                origin.ms, origin.hops, destination.ms, destination.hops
+                            );
                         }
                     }
                     let node = Node {
@@ -42,7 +43,7 @@ fn generate_router_graph() -> HashMap<Ipv4Addr, HashSet<Node>> {
                     match result.entry(origin.dst) {
                         Entry::Occupied(mut o) => {
                             o.get_mut().insert(node);
-                            },
+                        }
                         Entry::Vacant(v) => {
                             let map = v.insert(HashSet::new());
                             map.insert(node);
@@ -105,7 +106,7 @@ fn dijkstra_matrix(graph: &HashMap<u32, HashSet<AsPath>>, node: u32) -> HashMap<
         let mut found = false;
         for (k, v) in distance.iter() {
             let dist = *distance.get(&current).unwrap();
-            if !visited.contains(k) && *v != u32::MAX && (!found || current_dist > dist){
+            if !visited.contains(k) && *v != u32::MAX && (!found || current_dist > dist) {
                 current = *k;
                 current_dist = dist;
                 found = true;
@@ -124,21 +125,32 @@ fn max_dijkstra(graph: &HashMap<u32, HashSet<AsPath>>, node: u32) -> u32 {
     //debug!("dist vector: {:?}", distance);
 
     // Return the sum of distances
-    info!("Distance: {}", distance.iter().map(|(_,b)| *b).filter(|x| *x != u32::MAX).sum::<u32>() );
-    return distance.iter().map(|(_,b)| *b).filter(|x| *x != u32::MAX).sum::<u32>();
+    info!(
+        "Distance: {}",
+        distance
+            .iter()
+            .map(|(_, b)| *b)
+            .filter(|x| *x != u32::MAX)
+            .sum::<u32>()
+    );
+    return distance
+        .iter()
+        .map(|(_, b)| *b)
+        .filter(|x| *x != u32::MAX)
+        .sum::<u32>();
 }
 
 fn map_trace_to_as() -> HashMap<u32, HashSet<AsPath>> {
-    let mut result : HashMap<u32, HashSet<AsPath>> = HashMap::new();
+    let mut result: HashMap<u32, HashSet<AsPath>> = HashMap::new();
     let asn = load_asn();
     let graph = generate_router_graph();
-    
+
     // Hacer disjkstra para almacenar distancias entre ips, y anotar los path despues
     return result;
 }
 
 fn generate_datamap() -> HashMap<u32, HashSet<AsPath>> {
-    let mut result : HashMap<u32, HashSet<AsPath>> = HashMap::new();
+    let mut result: HashMap<u32, HashSet<AsPath>> = HashMap::new();
     {
         let asn = load_asn();
         let graph = generate_router_graph();
@@ -153,7 +165,7 @@ fn generate_datamap() -> HashMap<u32, HashSet<AsPath>> {
                                 if src == dst {
                                     continue;
                                 }
-                                // Insert the forward path  
+                                // Insert the forward path
                                 let node = AsPath {
                                     dst: *dst,
                                     dist: dist,
@@ -161,7 +173,7 @@ fn generate_datamap() -> HashMap<u32, HashSet<AsPath>> {
                                 match result.entry(*src) {
                                     Entry::Occupied(mut o) => {
                                         o.get_mut().insert(node);
-                                    },
+                                    }
                                     Entry::Vacant(v) => {
                                         let v = v.insert(HashSet::new());
                                         v.insert(node);
@@ -176,7 +188,7 @@ fn generate_datamap() -> HashMap<u32, HashSet<AsPath>> {
                                 match result.entry(*dst) {
                                     Entry::Occupied(mut o) => {
                                         o.get_mut().insert(node);
-                                    },
+                                    }
                                     Entry::Vacant(v) => {
                                         let v = v.insert(HashSet::new());
                                         v.insert(node);
@@ -196,7 +208,11 @@ fn generate_datamap() -> HashMap<u32, HashSet<AsPath>> {
 pub fn generate_distance() {
     let mut result = generate_datamap();
 
-    let mut nodes = result.iter().filter(|(k, v)| !v.is_empty()).map(|(k, _)| *k).collect::<Vec<u32>>();
+    let mut nodes = result
+        .iter()
+        .filter(|(k, v)| !v.is_empty())
+        .map(|(k, _)| *k)
+        .collect::<Vec<u32>>();
     nodes.sort();
     debug!("AS Graph: {} nodes", nodes.len());
     {
@@ -234,10 +250,10 @@ pub fn generate_distance() {
         for k in 0..n {
             for i in 0..n {
                 let start = distances[i.min(k)][i.max(k) - i.min(k)];
-                for j in (i+1)..n {
+                for j in (i + 1)..n {
                     let end = distances[k.min(j)][j.max(k) - j.min(k)];
-                    if distances[i][j-i] > start + end {
-                        distances[i][j-i] = start + end;
+                    if distances[i][j - i] > start + end {
+                        distances[i][j - i] = start + end;
                     }
                 }
             }
@@ -260,7 +276,11 @@ pub fn generate_distance() {
     return;
 
     // calculate the center of the graph
-    let mut nodes = result.iter().filter(|(k, v)| !v.is_empty()).map(|(k, _)| *k).collect::<Vec<u32>>();
+    let mut nodes = result
+        .iter()
+        .filter(|(k, v)| !v.is_empty())
+        .map(|(k, _)| *k)
+        .collect::<Vec<u32>>();
     nodes.sort();
     debug!("AS Graph: {} nodes", nodes.len());
     rayon::scope(|s| {
@@ -269,7 +289,12 @@ pub fn generate_distance() {
             s.spawn(|_| {
                 let tmp = asn;
                 let data = dijkstra_matrix(&result, *tmp);
-                let result = nodes.iter().map(|n| data.get(n).unwrap()).map(|x| x.to_string()).collect::<Vec<String>>().join(",");
+                let result = nodes
+                    .iter()
+                    .map(|n| data.get(n).unwrap())
+                    .map(|x| x.to_string())
+                    .collect::<Vec<String>>()
+                    .join(",");
 
                 println!("{},{}", tmp, result);
                 //println!("{}", data.iter().map(|(_,b)| *b).filter(|x| *x != u32::MAX).sum::<u32>());
@@ -300,7 +325,12 @@ fn calculate_distance(map: &HashMap<u32, HashSet<AsPath>>) {
     let target = 13768;
     println!("{:?}", map.get(&target).unwrap());
     let distance = dijkstra_matrix(map, origin);
-    println!("Distance from {} to {}: {}", origin, target, distance.get(&target).unwrap_or(&u32::MAX));
+    println!(
+        "Distance from {} to {}: {}",
+        origin,
+        target,
+        distance.get(&target).unwrap_or(&u32::MAX)
+    );
 }
 
 /// Calculate and print the max length of the AS graph
@@ -308,11 +338,14 @@ fn calculate_max_length(map: &HashMap<u32, HashSet<u32>>) {
     let origin = 23140;
     let mut visited = HashSet::new();
     let mut step = VecDeque::new();
-    step.push_back(Path {asn:origin, distance: 0 });
+    step.push_back(Path {
+        asn: origin,
+        distance: 0,
+    });
 
     let mut max_distance = 0;
     while let Some(current) = step.pop_front() {
-        if visited.contains(&current.asn) { 
+        if visited.contains(&current.asn) {
             continue;
         }
         visited.insert(current.asn);

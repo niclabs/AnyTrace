@@ -9,7 +9,6 @@ pub use self::helper::load_data;
 use self::join::join_data;
 use self::paths::check_paths;
 
-
 pub enum Steps {
     JoinData,
     Testing,

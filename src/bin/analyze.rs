@@ -16,7 +16,10 @@ fn main() {
     env_logger::init();
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
-        println!("Avaiable methods: {:?}", methods.iter().map(|(x,_ )| *x).collect::<Vec<&str>>());
+        println!(
+            "Avaiable methods: {:?}",
+            methods.iter().map(|(x, _)| *x).collect::<Vec<&str>>()
+        );
         return;
     }
 

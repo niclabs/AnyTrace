@@ -1,28 +1,15 @@
 use analyze::helper::{load_asn, load_data};
+use std::cmp::Ordering;
+use std::collections::BinaryHeap;
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::collections::hash_map::Entry;
-use std::hash::{Hash, Hasher};
 use std::net::Ipv4Addr;
 use std::u32;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct AsPath {
     asn: u32,
     dist: u32,
-}
-
-impl PartialEq for AsPath {
-    fn eq(&self, other: &AsPath) -> bool {
-        self.asn == other.asn
-    }
-}
-impl Eq for AsPath {}
-
-impl Hash for AsPath {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.asn.hash(state);
-    }
 }
 
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
@@ -32,7 +19,7 @@ struct TraceNode {
 }
 
 fn generate_router_graph() -> HashMap<Ipv4Addr, Vec<TraceNode>> {
-    let mut result : HashMap<Ipv4Addr, Vec<TraceNode>> = HashMap::new();
+    let mut result: HashMap<Ipv4Addr, Vec<TraceNode>> = HashMap::default();
     let data = load_data();
     debug!("Generating router graph");
     for (_, measurement) in data.iter() {
@@ -50,10 +37,11 @@ fn generate_router_graph() -> HashMap<Ipv4Addr, Vec<TraceNode>> {
                         ip: destination.dst,
                         dt: origin.ms.saturating_sub(destination.ms) as u32,
                     };
+
                     match result.entry(origin.dst) {
                         Entry::Occupied(mut o) => {
                             o.get_mut().push(node);
-                            },
+                        }
                         Entry::Vacant(v) => {
                             let map = v.insert(Vec::new());
                             map.push(node);
@@ -67,8 +55,8 @@ fn generate_router_graph() -> HashMap<Ipv4Addr, Vec<TraceNode>> {
     return result;
 }
 
-fn generate_asmap() -> HashMap<u32, HashSet<AsPath>> {
-    let mut result : HashMap<u32, HashSet<AsPath>> = HashMap::new();
+fn generate_asmap() -> HashMap<u32, Vec<AsPath>> {
+    let mut result: HashMap<u32, Vec<AsPath>> = HashMap::default();
     {
         let asn = load_asn();
         let graph = generate_router_graph();
@@ -85,34 +73,33 @@ fn generate_asmap() -> HashMap<u32, HashSet<AsPath>> {
                                     continue;
                                 }
                                 //println!("{} ({}) -> {} ({})",sip, src,dip, dst);
-                                // Insert the forward path  
+                                // Insert the forward path
                                 let node = AsPath {
                                     asn: *dst,
                                     dist: dist,
                                 };
                                 match result.entry(*src) {
                                     Entry::Occupied(mut o) => {
-                                        o.get_mut().insert(node);
-                                    },
+                                        o.get_mut().push(node);
+                                    }
                                     Entry::Vacant(v) => {
-                                        let v = v.insert(HashSet::new());
-                                        v.insert(node);
+                                        let v = v.insert(Vec::default());
+                                        v.push(node);
                                     }
                                 };
 
                                 // Insert the reverse path
-                                
                                 let node = AsPath {
                                     asn: *src,
                                     dist: dist,
                                 };
                                 match result.entry(*dst) {
                                     Entry::Occupied(mut o) => {
-                                        o.get_mut().insert(node);
-                                    },
+                                        o.get_mut().push(node);
+                                    }
                                     Entry::Vacant(v) => {
-                                        let v = v.insert(HashSet::new());
-                                        v.insert(node);
+                                        let v = v.insert(Vec::default());
+                                        v.push(node);
                                     }
                                 };
                             }
@@ -126,39 +113,49 @@ fn generate_asmap() -> HashMap<u32, HashSet<AsPath>> {
     return result;
 }
 
-fn dijkstra_as(graph: HashMap<u32, HashSet<AsPath>>, start: u32) -> HashMap::<u32, u32> {
+#[derive(Copy, Clone, Eq, PartialEq)]
+struct State {
+    id: u32,
+    dist: u32,
+}
+
+impl Ord for State {
+    fn cmp(&self, other: &State) -> Ordering {
+        other
+            .dist
+            .cmp(&self.dist)
+            .then_with(|| self.id.cmp(&other.id))
+    }
+}
+impl PartialOrd for State {
+    fn partial_cmp(&self, other: &State) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+fn dijkstra_as(graph: &HashMap<u32, Vec<AsPath>>, start: u32) -> HashMap<u32, u32> {
     let mut distance = HashMap::<u32, u32>::with_capacity(graph.len());
-    let mut visited = HashSet::new();
+    let mut heap = BinaryHeap::new();
 
     distance.insert(start, 0);
+    heap.push(State { dist: 0, id: start });
 
-    let mut current = start;
-    let mut current_dist = *distance.get(&current).unwrap();
-    loop {
-        for nodes in graph.get(&current) {
+    while let Some(State { id, dist }) = heap.pop() {
+        if dist > *distance.get(&id).unwrap_or(&u32::MAX) {
+            continue;
+        }
+
+        let next = 1 + dist;
+        for nodes in graph.get(&id) {
             for path in nodes.iter() {
-                if visited.contains(&path.asn) {
-                    continue;
-                }
-                let dist = 1 + current_dist;
-                if dist < *distance.get(&path.asn).unwrap_or(&u32::MAX) {
-                    distance.insert(path.asn, dist);
+                if next < *distance.get(&path.asn).unwrap_or(&u32::MAX) {
+                    distance.insert(path.asn, next);
+                    heap.push(State {
+                        dist: next,
+                        id: path.asn,
+                    });
                 }
             }
-        }
-        visited.insert(current);
-
-        let mut found = false;
-        for (k, v) in distance.iter() {
-            let dist = *distance.get(&current).unwrap();
-            if !visited.contains(k) && *v != u32::MAX && (!found || current_dist > dist){
-                current = *k;
-                current_dist = dist;
-                found = true;
-            }
-        }
-        if !found {
-            break;
         }
     }
 
@@ -167,20 +164,31 @@ fn dijkstra_as(graph: HashMap<u32, HashSet<AsPath>>, start: u32) -> HashMap::<u3
 
 pub fn check_paths() {
     let graph = generate_asmap();
-    let base = dijkstra_as(graph, 27678);
-    println!("a {:?}", base.iter().filter(|(_, y)| **y == 0).map(|(x,_)| *x).collect::<Vec<u32>>());
-    println!("b {:?}", base.iter().filter(|(_, y)| **y == 1).map(|(x,_)| *x).collect::<Vec<u32>>());
-    //println!("c {:?}", base.iter().filter(|(_, y)| **y == 2).map(|(x,_)| *x).collect::<Vec<u32>>());
-    //println!("d {:?}", base.iter().filter(|(_, y)| **y == 3).map(|(x,_)| *x).collect::<Vec<u32>>());
-    println!("max dist: {:?}", base.iter().max_by_key(|(_,x)| *x));
+    let base = dijkstra_as(&graph, 27678);
+    info!(
+        "a {:?}",
+        base.iter()
+            .filter(|(_, y)| **y == 0)
+            .map(|(x, _)| *x)
+            .collect::<Vec<u32>>()
+    );
+    info!(
+        "b {:?}",
+        base.iter()
+            .filter(|(_, y)| **y == 1)
+            .map(|(x, _)| *x)
+            .collect::<Vec<u32>>()
+    );
+    //info!("c {:?}", base.iter().filter(|(_, y)| **y == 2).map(|(x,_)| *x).collect::<Vec<u32>>());
+    info!("max dist: {:?}", base.iter().max_by_key(|(_, x)| *x));
+    info!("Distance from {}: {:?}", 27978, base.get(&27978));
     let mut x = 0;
-    // TODO: Check Hash, as each run give different numbers
     loop {
         let count = base.iter().filter(|(_, y)| **y == x).count();
         if count == 0 {
             break;
         }
-        println!("Length {}: {}", x, count);
+        info!("Length {}: {}", x, count);
         x += 1;
     }
 }
