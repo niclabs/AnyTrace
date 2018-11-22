@@ -1,7 +1,7 @@
 # AnyTrace
 AnyTrace es una colección de herramientas usada para detectar el área de servicio de diferentes servidores pertenecientes a una nube anycast.
 
-El codigo más reciente se puede encontrar en https://github.com/niclabs/AnyTrace
+El código más reciente se puede encontrar en https://github.com/niclabs/AnyTrace
 
 ## Dependencias para compilación
 AnyTrace se encuentra programado en *Rust*, por lo que para compilarlo es necesario instalar su compilador. Las instrucciones para esto lo pueden encontrar en https://www.rust-lang.org/en-US/install.html
@@ -14,7 +14,7 @@ Para Compilar AnyTrace, en la carpeta del repositorio debe ejecutar.
 cargo build --release
 ```
 
-Esto compilara las dependencias incluidas y generará el binario *target/release/anytrace*. Este binario puede traspasarse a otros computadores que utilicen la misma arquitectura, sin requerir la instalación de las dependencias en otros nodos.
+Esto compilará las dependencias incluidas y generará el binario *target/release/anytrace*. Este binario puede traspasarse a otros computadores que utilicen la misma arquitectura, sin requerir la instalación de las dependencias en otros nodos.
 
 ## Permisos
 Dado que este programa escucha de manera directa los paquetes ICMP, este requiere permisos de administrador, o CAP_NET_RAW en linux para ejecutarse en modo usuario. En cada servidor en el cual se quiera ejecutar se deben agregar los permisos de la siguiente forma:
@@ -23,7 +23,7 @@ sudo setcap CAP_NET_RAW+ep target/release/anytrace
 ```
 
 ## Ejecución
-AnyTrace se debe ejecutar en cada servidor de manera independiente. La ejecución completa en un nodo toma aproximadamente 30 minutos a una velocidad de 20.000 paquetes por segundo (9,7MBit/s) utilizando unicast, y se espera que su ejecución sea mucho más rápida en nodos anycast.
+AnyTrace se debe ejecutar en cada servidor de manera independiente. La ejecución completa en un nodo toma aproximadamente 20 minutos a una velocidad de 20.000 paquetes por segundo (9,7MBit/s) utilizando unicast, y se espera que su ejecución sea mucho más rápida en nodos anycast.
 
 Los parámetros de este programa son los siguientes:
 
@@ -35,7 +35,7 @@ Los parámetros de este programa son los siguientes:
 | hitlist   | Archivo con direcciones IP a medir                    |
 | master    | Indica que se debe ejecutar como maestro              |
 
-Cada nodo debe ejecutarse de la siguiente manera, cambiando la dirección IP (x.x.x.x) a una local en la red anycast, no siendo necesario utilizar una dirección en producción:
+Cada nodo debe ejecutarse de la siguiente manera, cambiando la dirección IP (x.x.x.x) a una local **en la red anycast**, no siendo necesario utilizar una dirección en producción:
 
 ```
 ./target/release/anytrace\
