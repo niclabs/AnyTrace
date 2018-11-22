@@ -1,7 +1,8 @@
-use analyze::helper::{load_asn, load_data, asn_geoloc};
+use analyze::helper::{asn_geoloc, load_asn, load_data};
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::collections::hash_map::Entry;
 use std::env;
 use std::net::Ipv4Addr;
@@ -19,7 +20,7 @@ struct TraceNode {
     dt: u32,
 }
 
-fn generate_router_graph(tracepath: String) -> HashMap<Ipv4Addr, Vec<TraceNode>> {
+fn generate_router_graph(tracepath: &String) -> HashMap<Ipv4Addr, Vec<TraceNode>> {
     let mut result: HashMap<Ipv4Addr, Vec<TraceNode>> = HashMap::default();
     let data = load_data(tracepath);
     debug!("Generating router graph");
@@ -56,7 +57,7 @@ fn generate_router_graph(tracepath: String) -> HashMap<Ipv4Addr, Vec<TraceNode>>
     return result;
 }
 
-fn generate_asmap(tracepath: String, asnpath: String) -> HashMap<u32, Vec<AsPath>> {
+fn generate_asmap(tracepath: &String, asnpath: &String) -> HashMap<u32, Vec<AsPath>> {
     let mut result: HashMap<u32, Vec<AsPath>> = HashMap::default();
     {
         let asn = load_asn(asnpath);
@@ -160,7 +161,7 @@ fn dijkstra_as(graph: &HashMap<u32, Vec<AsPath>>, start: u32) -> HashMap<u32, u3
     return distance;
 }
 
-fn bucket_as(distance: &HashMap<u32, u32>, origin: u32, asnpath: String) {
+fn bucket_as(distance: &HashMap<u32, u32>, asnpath: &String) {
     let geo = asn_geoloc(asnpath);
     let mut result = HashMap::new();
     for (asn, dist) in distance.iter() {
@@ -172,11 +173,11 @@ fn bucket_as(distance: &HashMap<u32, u32>, origin: u32, asnpath: String) {
             }
         }
     }
-    
+
     let mut x = 0;
     while let Some(data) = result.get(&x) {
-        let mut loc = data.iter().collect::<Vec<(&String,&u32)>>();
-        loc.sort_by_key(|(_,c)| u32::MAX - *c);
+        let mut loc = data.iter().collect::<Vec<(&String, &u32)>>();
+        loc.sort_by_key(|(_, c)| u32::MAX - *c);
         info!("Locations len {}: {:?}", x, loc);
         x += 1;
     }
@@ -186,13 +187,14 @@ pub fn check_paths() {
     let arguments = env::args().collect::<Vec<String>>();
     if arguments.len() < 4 {
         panic!("Argments: <traces.csv> <asn.csv>");
-    }    
+    }
     let tracepath = arguments[2].clone();
     let asnpath = arguments[3].clone();
 
-    let graph = generate_asmap(tracepath, asnpath.clone());
+    let graph = generate_asmap(&tracepath, &asnpath);
     let base = dijkstra_as(&graph, 27678);
-    bucket_as(&base, 27678, asnpath);
+    bucket_as(&base, &asnpath);
+    check_as_rangecount(&tracepath, &asnpath);
 
     info!("max dist: {:?}", base.iter().max_by_key(|(_, x)| *x));
     info!("Distance from {}: {:?}", 27978, base.get(&27978));
@@ -208,6 +210,43 @@ pub fn check_paths() {
     }
 }
 
-// Ahora: Teorizar efecto de poner un nodo en algun punto. 
-//        Colocar distancias entre los AS (?)
-//        Geolocalizar ASN
+fn check_as_rangecount(tracepath: &String, asnpath: &String) {
+    let mut count = HashMap::new();
+    {
+        let mut visited = HashSet::new();
+        let asn = load_asn(asnpath);
+        let graph = generate_router_graph(tracepath);
+        for (src, destinations) in graph.iter() {
+            let prefix = u32::from(*src) & 0xFFFFFF00;
+            if let Some((_, _, src)) = asn.longest_match(*src) {
+                if !visited.contains(&prefix) {
+                    visited.insert(prefix);
+                    for src in src.iter() {
+                        let mut cnt = count.entry(*src).or_insert(0);
+                        *cnt += 1;
+                    }
+                }
+                for dst in destinations.iter() {
+                    let prefix = u32::from(dst.ip) & 0xFFFFFF00;
+                    if let Some((_, _, dst)) = asn.longest_match(dst.ip) {
+                        for src in src.iter() {
+                            for dst in dst.iter() {
+                                if src == dst {
+                                    continue;
+                                }
+                                if !visited.contains(&prefix) {
+                                    visited.insert(prefix);
+                                    let mut cnt = count.entry(*dst).or_insert(0);
+                                    *cnt += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let mut res = count.iter().collect::<Vec<(&u32, &u32)>>();
+    res.sort_by_key(|(_, c)| u32::MAX - *c);
+    info!("Top used AS: {:?}", &res[0..10]);
+}

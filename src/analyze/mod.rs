@@ -18,6 +18,6 @@ pub fn run(step: &Steps) {
     match step {
         Steps::JoinData => join_data(false),
         Steps::Paths => check_paths(),
-        _ => {},
+        _ => {}
     }
 }
