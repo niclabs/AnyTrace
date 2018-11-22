@@ -195,6 +195,7 @@ pub fn check_paths() {
     let base = dijkstra_as(&graph, 27678);
     bucket_as(&base, &asnpath);
     check_as_rangecount(&tracepath, &asnpath);
+    calculate_latency(&tracepath, &asnpath);
 
     info!("max dist: {:?}", base.iter().max_by_key(|(_, x)| *x));
     info!("Distance from {}: {:?}", 27978, base.get(&27978));
@@ -249,4 +250,32 @@ fn check_as_rangecount(tracepath: &String, asnpath: &String) {
     let mut res = count.iter().collect::<Vec<(&u32, &u32)>>();
     res.sort_by_key(|(_, c)| u32::MAX - *c);
     info!("Top used AS: {:?}", &res[0..10]);
+}
+
+fn calculate_latency(tracepath: &String, asnpath: &String) {
+    // TODO: Change the single origin to mul
+    let mut latency = HashMap::new();
+    {
+        let asndata = load_asn(asnpath);
+        let data = load_data(tracepath);
+        for (_, measurement) in data.iter() {
+            let data = &measurement.data;
+            let l = data.len();
+            for item in data {
+                if let Some(item) = item {
+                    if let Some((_, _, asn)) = asndata.longest_match(item.dst) {
+                        for asn in asn {
+                            latency.entry(asn.clone()).or_insert(Vec::new()).push(item.ms);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let mut res = latency.iter().map(|(asn, lat)| (asn, lat.iter().fold(0, |acc, x| acc + *x) / lat.iter().count() as u64)).collect::<Vec<(&u32, u64)>>();
+    use std::u64;
+    res.sort_by_key(|(_, c)| u64::MAX - *c);
+    info!("Top latency AS: {:?}", &res[0..10]);
+
 }
