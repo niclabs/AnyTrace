@@ -112,7 +112,6 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>
             // verify if actual network is in blacklist
             let node_match_op = blist_trie.get_ancestor(key);
             if node_match_op.is_some() {
-                debug!("contained");
                 value.borrow_mut().last = true;
                 continue;
             }

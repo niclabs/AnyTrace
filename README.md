@@ -69,3 +69,8 @@ pyhon3 src/hitlist/statistics.py <stat name> <path1> <path2>
     - `alive_asn`
     - `dead_networks`
     - `alive_networks`
+
+
+## ASSUMPTIONS(IMPORTANT):
+- the trie used doesnt support /0 prefixes,
+- to ignore every possible ip use both 1.0.0.0/1, 128.0.0.0/1 networks
