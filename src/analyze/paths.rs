@@ -183,34 +183,6 @@ fn bucket_as(distance: &HashMap<u32, u32>, asnpath: &String) {
     }
 }
 
-pub fn check_paths() {
-    let arguments = env::args().collect::<Vec<String>>();
-    if arguments.len() < 4 {
-        panic!("Argments: <traces.csv> <asn.csv>");
-    }
-    let tracepath = arguments[2].clone();
-    let asnpath = arguments[3].clone();
-
-    let graph = generate_asmap(&tracepath, &asnpath);
-    let base = dijkstra_as(&graph, 27678);
-    bucket_as(&base, &asnpath);
-    check_as_rangecount(&tracepath, &asnpath);
-    calculate_latency(&tracepath, &asnpath);
-
-    info!("max dist: {:?}", base.iter().max_by_key(|(_, x)| *x));
-    info!("Distance from {}: {:?}", 27978, base.get(&27978));
-
-    let mut x = 0;
-    loop {
-        let count = base.iter().filter(|(_, y)| **y == x).count();
-        if count == 0 {
-            break;
-        }
-        info!("Length {}: {}", x, count);
-        x += 1;
-    }
-}
-
 fn check_as_rangecount(tracepath: &String, asnpath: &String) {
     let mut count = HashMap::new();
     {
@@ -252,7 +224,7 @@ fn check_as_rangecount(tracepath: &String, asnpath: &String) {
     info!("Top used AS: {:?}", &res[0..10]);
 }
 
-fn calculate_latency(tracepath: &String, asnpath: &String) {
+fn calculate_latency(tracepath: &String, asnpath: &String) -> HashMap<u32, u64> {
     // TODO: Change the single origin to mul
     let mut latency = HashMap::new();
     {
@@ -277,5 +249,76 @@ fn calculate_latency(tracepath: &String, asnpath: &String) {
     use std::u64;
     res.sort_by_key(|(_, c)| u64::MAX - *c);
     info!("Top latency AS: {:?}", &res[0..10]);
-
+    return latency.iter().map(|(asn, lat)| (*asn, lat.iter().fold(0, |acc, x| acc + *x) / lat.iter().count() as u64)).collect::<HashMap<u32, u64>>();;
 }
+
+fn pathfind_as(src: u32, target: u32, graph: &HashMap<u32, Vec<AsPath>>) -> Vec<u32> {
+    let mut distance = HashMap::<u32, u32>::with_capacity(graph.len());
+    let mut paths = HashMap::<u32, Vec<u32>>::with_capacity(graph.len());
+
+    let mut heap = BinaryHeap::new();
+
+    distance.insert(src, 0);
+    heap.push(State { dist: 0, id: src });
+    paths.insert(src, vec![src]);
+
+    while let Some(State { id, dist }) = heap.pop() {
+        if dist > *distance.get(&id).unwrap_or(&u32::MAX) {
+            continue;
+        }
+
+        let next = 1 + dist;
+        for nodes in graph.get(&id) {
+            for path in nodes.iter() {
+                if next < *distance.get(&path.asn).unwrap_or(&u32::MAX) {
+                    distance.insert(path.asn, next);
+                    heap.push(State {
+                        dist: next,
+                        id: path.asn,
+                    });
+                    let mut p = paths.get(&id).unwrap().clone();
+                    p.push(path.asn);
+                    paths.insert(path.asn, p);
+                }
+            }
+        }
+    }
+    //info!("{:?}", paths);
+    info!("{:?}", distance.get(&target));
+    info!("{:?}", paths.get(&target));
+    return paths.get(&target).unwrap().clone();
+}
+
+pub fn check_paths() {
+    let arguments = env::args().collect::<Vec<String>>();
+    if arguments.len() < 4 {
+        panic!("Argments: <traces.csv> <asn.csv>");
+    }
+    let tracepath = arguments[2].clone();
+    let asnpath = arguments[3].clone();
+
+    let graph = generate_asmap(&tracepath, &asnpath);
+    let base = dijkstra_as(&graph, 27678);
+    //bucket_as(&base, &asnpath);
+    //check_as_rangecount(&tracepath, &asnpath);
+    //calculate_latency(&tracepath, &asnpath);
+
+    info!("max dist: {:?}", base.iter().max_by_key(|(_, x)| *x));
+    info!("Distance from {}: {:?}", 27978, base.get(&27978));
+    info!("Distance to {}: {:?}", 59891, base.get(&59891));
+    info!("path to {}: {:?}", 59891, pathfind_as(27678, 59891, &graph));
+
+    let mut x = 0;
+    loop {
+        let count = base.iter().filter(|(_, y)| **y == x).count();
+        if count == 0 {
+            break;
+        }
+        info!("Length {}: {}", x, count);
+        x += 1;
+    }
+}
+
+
+// TODO: Ver si puedo cambiar los AS_SET {} a algo mas determinista, dado que no estan ordenados (puedo saber cual esta primero? Puedo usar mas de una tabla y elegir el que no usa AS_SET?) (Para esos puedo usar otra fuente como el whois?)
+//       Esto hace que no se sepa la cantidad de saltos real (esta comprimida), pero nuestro metodo igual revela el actual

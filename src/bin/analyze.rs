@@ -26,7 +26,8 @@ fn main() {
     for (key, p) in methods.iter() {
         if args[1] == *key {
             run(p);
-            break;
+            return;
         }
     }
+    panic!("{} not found in methods", args[1]);
 }

@@ -82,6 +82,18 @@ pub fn load_asn(asnpath: &String) -> IpLookupTable<Ipv4Addr, Vec<u32>> {
     let f = File::open(asnpath).unwrap();
     for line in BufReader::new(f).lines() {
         let line = line.unwrap();
+        if line.contains("{") {
+            let count = line.chars().filter(|x| x == &'{').count();
+            if count > 1 {
+                panic!("ASN with multiple AS_SETS not handled ({})", line);
+            }
+            let subline = line.split("{").skip(1).next().unwrap();
+            let set = subline.split("}").next().unwrap();
+            let set = set.split(",").collect::<HashSet<&str>>();
+            if set.len() > 1 {
+                //println!("{} {:?}", line, set);
+            }
+        }
         let line = line.replace("{", "").replace("}", "");
         let data = line.split(",").collect::<Vec<&str>>();
         let network = data[0].split("/").collect::<Vec<&str>>();
