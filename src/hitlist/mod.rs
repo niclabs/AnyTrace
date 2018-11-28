@@ -41,8 +41,8 @@ use std::thread;
 mod hdrs;
 pub mod refresh;
 
-pub fn run(dummy: &str) {
-    let mut file = File::open("data/asn_prefixes.json").unwrap();
+pub fn run(jsonpath: &String, blacklist_path: &String) {
+    let mut file = File::open(jsonpath).unwrap();
     let mut data = String::new();
     file.read_to_string(&mut data).unwrap();
     let dict: hdrs::Dictionary = serde_json::from_str(&data).unwrap();
@@ -54,13 +54,13 @@ pub fn run(dummy: &str) {
     }
     info!("{}", network_vec.len());
     let mut trie = hdrs::create_trie(&mut network_vec);
-    channel_runner(&mut trie);
+    channel_runner(&mut trie, blacklist_path);
 }
 
-pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>) {
+pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>, path: &String) {
 
     //reading black list of networks
-    let bf= File::open("data/blacklist.txt").unwrap();
+    let bf= File::open(path).unwrap();
     let bfile= BufReader::new(&bf);
     let mut bdata =  Vec::new();
     for (num, line) in bfile.lines().enumerate() {
@@ -110,9 +110,9 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>
                 value.borrow_mut().last = true;
                 continue;
             }
-
-
+            
             mybreak = false;
+
             let mut it =0;
             while it< value.borrow().sent{
                    
@@ -124,7 +124,14 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>
                 let ip_network = value.borrow().address.clone();
                 let i = value.borrow().current_ip.clone();
                 let ip = ip_network.from(&value.borrow().current_ip, &ip_network.prefix);
-
+                //verify if this ip is the last ip to be consulted
+                let last = ip_network.last();
+                if ip == last {
+                        hdrs::write_alive_ip(&ip, &wr_handler);
+                        value.borrow_mut().last = true;
+                        debug!("last");
+                        break;
+                    }
                 // verify if  ip is in blacklist
                 let node_match_op = blist_trie.get_ancestor(&hdrs::net_to_vector(&ip));
                 if node_match_op.is_some() {
@@ -133,13 +140,8 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>
                     continue;
                 }
                 else
-                {
-                    let last = ip_network.last();
+                {   
                     hdrs::write_alive_ip(&ip, &wr_handler);
-                    if ip == last {
-                        value.borrow_mut().last = true;
-                        break;
-                    }
                     value.borrow_mut().current_ip = i.add(BigUint::one());
                     it+=1;
                 }

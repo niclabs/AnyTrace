@@ -3,6 +3,13 @@ import ipaddress
 import pytricia
 import sys
 
+'''
+list of networks that should never be pingged
+for example private networks 10.0.0.0/8,
+or loopback 127.0.0.0/8
+'''
+networks_blacklisted= [ "127.0.0.0/8", "10.0.0.0/8", "0.0.0.0/8", "240.0.0.0/8", "91.231.220.0/24"]
+
 class Statistics():
     def __init__(self, jdata, sfile):
         '''
@@ -15,7 +22,7 @@ class Statistics():
 
         self.asn_len= len(self.data)
         ip_file = open(sfile)
-        self.ips= [x.strip() for x in ip_file] 
+        self.ips= [x.strip() for x in ip_file]
         self.asns=[]
         self.initAsn()
         self.trie= pytricia.PyTricia()
@@ -112,6 +119,8 @@ class Statistics():
                 self.trie.delete(prefix)
       
         blacklist= self.trie.keys()
+        for i in networks_blacklisted:
+            blacklist.append(i)
         f = open("data/blacklist.txt", "w+")
         for net in blacklist:
             f.write(net +"\n")
@@ -155,5 +164,9 @@ if __name__ == '__main__':
     rfile =sys.argv[3]
     stat= Statistics(Asns, rfile)
     stat.asn_partial_coverage()
-    map = {"dead_asn": stat.dead_asn(),"alive_asn":  stat.alive_asn() ,"dead_networks": stat.dead_networks(),"alive_networks":  stat.alive_networks(),"blacklist": stat.find_blacklist()}  
+    map = {"dead_asn": stat.dead_asn,
+    "alive_asn":  stat.alive_asn ,
+    "dead_networks": stat.dead_networks,
+    "alive_networks":  stat.alive_networks,
+    "blacklist": stat.find_blacklist} 
     map[method]

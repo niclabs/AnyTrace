@@ -21,7 +21,11 @@ The structure of the json file must be the following:
 - {asn1: [network1, netwok2 ...], asn2 :[network1, network2, ...]}  
 
 for example:  
-- {"42708": ["0.0.0.0/0", "5.198.248.0/21"]}
+- {"42708": ["0.0.0.0/0", "5.198.248.0/21"]}  
+
+Aditionally in order to avoid pingging Networks that do not support ICMP, it is highlt  
+recomended to provide a **blacklist.txt** file of those networks that should not be consulted.  
+Not doing so could derive in congestion, and possible looping.
 
 
 ## Running hitlist
@@ -30,7 +34,7 @@ running with debbuging options are recommended. The user must be positioned in t
 - to run hitlist :
 
 ```
-cargo build && sudo RUST_LOG=DEBUG ./target/debug/hitlist > filename
+cargo build && sudo RUST_LOG=DEBUG ./target/debug/hitlist /data/asn_prefixes.json /data/blacklist.txt> filename
 
 ```
 
