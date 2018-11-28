@@ -41,7 +41,7 @@ use std::thread;
 mod hdrs;
 pub mod refresh;
 
-pub fn run(jsonpath: &String, blacklist_path: &String) {
+pub fn run(jsonpath: &String, blacklist_path: Option<&String>) {
     let mut file = File::open(jsonpath).unwrap();
     let mut data = String::new();
     file.read_to_string(&mut data).unwrap();
@@ -57,19 +57,25 @@ pub fn run(jsonpath: &String, blacklist_path: &String) {
     channel_runner(&mut trie, blacklist_path);
 }
 
-pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>, path: &String) {
+pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>, path: Option<&String>) {
 
-    //reading black list of networks
-    let bf= File::open(path).unwrap();
-    let bfile= BufReader::new(&bf);
-    let mut bdata =  Vec::new();
-    for (num, line) in bfile.lines().enumerate() {
-        let l = line.unwrap();
-        bdata.push(l);
+    //reading black list of network
+    let mut blist_trie;
+    if path.is_some() {
+        let this_path= (&path.unwrap()).clone();
+        let bf= File::open(this_path).unwrap();
+        let bfile= BufReader::new(&bf);
+        let mut bdata =  Vec::new();
+        for (num, line) in bfile.lines().enumerate() {
+            let l = line.unwrap();
+            bdata.push(l);
+        }
+        //black list trie
+        blist_trie = hdrs::create_trie(&mut bdata);
     }
-    //black list trie
-    let mut blist_trie = hdrs::create_trie(&mut bdata);
-
+    else{
+            blist_trie= Trie::new();
+        }
     let rate = 10000;
     let handler = PingHandlerBuilder::new()
         .localip("172.30.65.57")
@@ -103,10 +109,10 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>
                 continue;
             }
 
-
             // verify if actual network is in blacklist
             let node_match_op = blist_trie.get_ancestor(key);
             if node_match_op.is_some() {
+                debug!("contained");
                 value.borrow_mut().last = true;
                 continue;
             }
@@ -129,7 +135,7 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>
                 if ip == last {
                         hdrs::write_alive_ip(&ip, &wr_handler);
                         value.borrow_mut().last = true;
-                        debug!("last");
+                        //debug!("last");
                         break;
                     }
                 // verify if  ip is in blacklist
@@ -146,7 +152,9 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>
                     it+=1;
                 }
             }
-            value.borrow_mut().sent +=1;
+            // grows in order 2^n
+            let n= value.borrow_mut().sent;
+            value.borrow_mut().sent += n;
         }
 
         // if an ip was received within the network
@@ -197,3 +205,45 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>
         // if all true break
     }
 }
+
+
+#[test]
+ // this tests verifies blacklist functionality
+ fn test1(){
+     let mut b_vec = vec![
+         String::from("10.0.0.0/8"),
+         String::from("13.0.0.0/8"),
+         String::from("1.0.0.0/8"),
+    
+     ];
+     let mut l_vec = vec![
+         String::from("13.79.45.3/32"),
+     ];
+    let vec= hdrs:: net_to_vector(&IPAddress::parse("1.1.1.1/32").unwrap());
+    let b_trie= hdrs::create_trie(& mut b_vec);
+    let l_trie= hdrs::create_trie(&mut l_vec);
+    assert_eq!(b_trie.get_ancestor(&vec).is_some() ,true);
+    
+    
+    for(key,value) in l_trie.iter(){
+        let node= b_trie.get_ancestor(key);
+        assert_eq!(node.is_some(), true);
+    }
+
+
+ }
+
+#[test]
+ // this test verifies universe network contains every network
+ fn test2(){
+
+     let mut b_vec = vec![
+         String::from("1.0.0.0/1"),
+         String::from("128.0.0.0/1"),
+     ];
+     
+    let b_trie= hdrs::create_trie(& mut b_vec);
+    assert_eq!(b_trie.get_ancestor(&hdrs:: net_to_vector(&IPAddress::parse("255.255.255.245/32").unwrap())).is_some() ,true);
+    assert_eq!(b_trie.get_ancestor(&hdrs:: net_to_vector(&IPAddress::parse("0.0.0.1/32").unwrap())).is_some() ,true);
+
+ }

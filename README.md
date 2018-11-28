@@ -23,7 +23,7 @@ The structure of the json file must be the following:
 for example:  
 - {"42708": ["0.0.0.0/0", "5.198.248.0/21"]}  
 
-Aditionally in order to avoid pingging Networks that do not support ICMP, it is highlt  
+Aditionally in order to avoid pinging Networks that do not support ICMP, it is highlt  
 recomended to provide a **blacklist.txt** file of those networks that should not be consulted.  
 Not doing so could derive in congestion, and possible looping.
 
@@ -34,7 +34,7 @@ running with debbuging options are recommended. The user must be positioned in t
 - to run hitlist :
 
 ```
-cargo build && sudo RUST_LOG=DEBUG ./target/debug/hitlist /data/asn_prefixes.json /data/blacklist.txt> filename
+cargo build && sudo RUST_LOG=DEBUG ./target/debug/hitlist data/asn_prefixes.json data/blacklist.txt> filename
 
 ```
 
@@ -46,7 +46,7 @@ cargo build && sudo RUST_LOG=DEBUG ./target/debug/hitlist/refresh > filename
 ```
 
 # BlackList and coverage
-To generate a blacklist of networks that should not be pingged a python code is provided:
+To generate a blacklist of networks that should not be pinged a python code is provided:
 
 ## Running 
 

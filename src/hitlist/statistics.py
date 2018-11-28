@@ -169,4 +169,4 @@ if __name__ == '__main__':
     "dead_networks": stat.dead_networks,
     "alive_networks":  stat.alive_networks,
     "blacklist": stat.find_blacklist} 
-    map[method]
+    map[method]()
