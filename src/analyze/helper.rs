@@ -9,14 +9,14 @@ use std::net::Ipv4Addr;
 
 use self::treebitmap::IpLookupTable;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Data {
     pub dst: Ipv4Addr,
     pub hops: u8,
     pub ms: u64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Measurement {
     pub data: Vec<Option<Data>>,
 }
