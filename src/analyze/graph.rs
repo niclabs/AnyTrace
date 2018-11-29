@@ -42,10 +42,6 @@ fn generate_iplink(tracepath: &String) -> HashMap<Ipv4Addr, HashMap<u32, Vec<(Ip
             }
         }
     }
-    info!("Elements: {}", merge.len());
-    //println!("{:?}", merge.iter().max_by_key(|(_, v)| v.len()));
-    info!("{:?}", merge.get(&Ipv4Addr::new(200, 7, 6, 0)));
-    info!("{:?}", merge.get(&Ipv4Addr::new(176,10,100,0)));
     return merge;
 }
 
@@ -105,16 +101,18 @@ fn analyze_paths(graph: &HashMap<Ipv4Addr, HashMap<u32, Vec<(Ipv4Addr, u32)>>>, 
         }
     }
 
+    let ip: Ipv4Addr = "216.66.87.0".parse().unwrap();
+    info!("Sources of 216.66.87.118: {:?}", graph.iter().map(|(_,v)| 
+            v.iter() // HashMap
+                .map(|(_, next)| next.iter().filter(|(address, _)| *address == ip).map(|x| *x).collect::<Vec<(Ipv4Addr, u32)>>())
+                .fold(Vec::new(), |mut current, next| {current.extend(next); current}))
+        .filter(|x| x.len() > 0)
+        .fold(Vec::new(), |mut current, next| {current.extend(next); current}));
+
+    info!("Position of 185.32.124.199: {:?}", graph.get(&"185.32.124.0".parse().unwrap()));
     info!("max distance: {:?}", distance.iter().max_by_key(|(_, d)| *d));
     info!("Distance from 185.32.124.199: {:?}", distance.get(&("185.32.124.0".parse().unwrap(), 17)));
     info!("path for 185.32.124.199: {:?}", paths.get(&("185.32.124.0".parse().unwrap(), 17)));
-    use std::{thread, time};
-
-let ten_millis = time::Duration::from_millis(100000000);
-let now = time::Instant::now();
-
-thread::sleep(ten_millis);
-
 }
 
 pub fn graph_info() {
