@@ -43,7 +43,7 @@ cargo build && sudo RUST_LOG=DEBUG ./target/debug/hitlist data/asn_prefixes.json
 - to refresh the file
 
 ```
-cargo build && sudo RUST_LOG=DEBUG ./target/debug/hitlist/refresh > filename
+cargo build && sudo RUST_LOG=DEBUG ./target/debug/refresh data/asn_prefixes.json filename data/blacklist.txt> refresh
 
 ```
 

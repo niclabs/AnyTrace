@@ -57,7 +57,8 @@ pub fn refresh_file(jsonpath: &String, ipfilepath: &String, blacklist_path: Opti
      //reading black list of networks
     let mut bdata =  Vec::new();
     if blacklist_path.is_some(){
-        let bf= File::open(&blacklist_path.unwrap()).unwrap();
+        let this_path= (&blacklist_path.unwrap()).clone();
+        let bf= File::open(this_path).unwrap();
         let bfile= BufReader::new(&bf);
         for (num, line) in bfile.lines().enumerate() {
             let l = line.unwrap();
