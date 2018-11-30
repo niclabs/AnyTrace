@@ -131,15 +131,17 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>
                 let ip = ip_network.from(&value.borrow().current_ip, &ip_network.prefix);
                 //verify if this ip is the last ip to be consulted
                 let last = ip_network.last();
+                // ip in mask 32
+                let ip_32= ip.change_prefix(32).unwrap();
                 if ip == last {
                         hdrs::write_alive_ip(&ip, &wr_handler);
                         value.borrow_mut().last = true;
-                        //debug!("last");
                         break;
                     }
                 // verify if  ip is in blacklist
-                let node_match_op = blist_trie.get_ancestor(&hdrs::net_to_vector(&ip));
+                let node_match_op = blist_trie.get_ancestor(&hdrs::net_to_vector(&ip_32));
                 if node_match_op.is_some() {
+                    debug!("skipped ip in blacklist");
                     value.borrow_mut().current_ip = i.add(BigUint::one());
                     it+=1;
                     continue;
@@ -246,3 +248,44 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>
     assert_eq!(b_trie.get_ancestor(&hdrs:: net_to_vector(&IPAddress::parse("0.0.0.1/32").unwrap())).is_some() ,true);
 
  }
+
+ #[test]
+ // test verifies ip is skipped if it is in a blacklisted network
+
+  fn test3(){
+
+     let mut b_vec = vec![
+         String::from("1.0.0.0/1"),
+         String::from("128.0.0.0/1"),
+     ];
+    //---------part1------------------------------------------------------------------
+    let b_trie= hdrs::create_trie(& mut b_vec);
+    let mut vec = vec![1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1];
+    assert_eq!(vec, hdrs::net_to_vector(&IPAddress::parse("255.255.255.255/32").unwrap()));
+
+    //---------part2------------------------------------------------------------------
+    
+    let test_ip = IPAddress::parse("0.0.0.0/0").unwrap();
+    let first= test_ip.first();
+    let first_32 = first.change_prefix(32).unwrap();
+    println!("{}", first.to_s());
+    println!("{}", first.prefix.get_prefix());
+    let mut vec2 = vec![0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1];
+    assert_eq!(vec2, hdrs::net_to_vector(&first_32));
+    
+
+    //---------part3------------------------------------------------------------------
+    
+    let ip_net = IPAddress::parse("0.0.0.0/8").unwrap();
+    let last = ip_net.last();
+    println!("{}", last.to_s());
+    let bit_vec = hdrs::net_to_vector(&ip_net);
+    let mut host_address = ip_net.network().host_address.add(BigUint::one());;
+    let ip = ip_net.from(&host_address, &ip_net.prefix);
+    let new_ip= ip.change_prefix(32).unwrap();
+    println!("{}", ip.prefix.get_prefix());
+    assert_eq!(IPAddress::parse("0.0.0.1").unwrap(), new_ip);
+    
+    
+ }
+
