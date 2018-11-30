@@ -29,7 +29,9 @@ Not doing so could derive in congestion, and possible looping.
 
 
 ## Running hitlist
-running with debbuging options are recommended. The user must be positioned in the hitlist folder.
+running with debbuging options are recommended. The user must be positioned in root proyect folder.
+
+The user must edit **/hitlist/mod.rs** line 81 to the local ip of the device running the program.
 
 - to run hitlist :
 

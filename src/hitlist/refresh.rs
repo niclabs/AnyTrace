@@ -40,10 +40,10 @@ use std::sync::Mutex;
 use std::thread;
 use ::hitlist::hdrs;
 
-pub fn refresh_file()
+pub fn refresh_file(jsonpath: &String, ipfilepath: &String, blacklist_path: Option<&String>)
 {   
     //creating trie from asn file
-    let mut jsonfile = File::open("data/asn_prefixes.json").unwrap();
+    let mut jsonfile = File::open(jsonpath).unwrap();
     let mut jsondata = String::new();
     jsonfile.read_to_string(&mut jsondata).unwrap();
     let dict: hdrs:: Dictionary = serde_json::from_str(&jsondata).unwrap();
@@ -55,13 +55,14 @@ pub fn refresh_file()
     }
 
      //reading black list of networks
-
-    let bf= File::open("data/blacklist.txt").unwrap();
-    let bfile= BufReader::new(&bf);
     let mut bdata =  Vec::new();
-    for (num, line) in bfile.lines().enumerate() {
-        let l = line.unwrap();
-        bdata.push(l);
+    if blacklist_path.is_some(){
+        let bf= File::open(&blacklist_path.unwrap()).unwrap();
+        let bfile= BufReader::new(&bf);
+        for (num, line) in bfile.lines().enumerate() {
+            let l = line.unwrap();
+            bdata.push(l);
+        }
     }
     //black list trie
     let mut blist_trie = hdrs::create_trie(&mut bdata);
@@ -70,7 +71,7 @@ pub fn refresh_file()
 
     //reading ip file into a vector
 
-    let f = File::open("archivo").unwrap();
+    let f = File::open(ipfilepath).unwrap();
     let file = BufReader::new(&f);
     let mut data = Vec::new();
     for (num, line) in file.lines().enumerate() {
@@ -135,54 +136,59 @@ pub fn refresh_file()
      the remaining networks in the trie must be pinged*/
     loop{
         let mut mybreak = true;
-
+        debug!("sending");
         for (key, value) in trie.iter() {
             if value.borrow().last {
                 continue;
             }
+
             // verify if actual network is in blacklist
             let node_match_op = blist_trie.get_ancestor(key);
-
             if node_match_op.is_some() {
                 value.borrow_mut().last = true;
                 continue;
             }
-           
+            
             mybreak = false;
+
             let mut it =0;
             while it< value.borrow().sent{
-              
+                   
                 if let Err(_) = ratelimit.check() {
                     mybreak = false;
                     break;
                 }
-            
+
                 let ip_network = value.borrow().address.clone();
                 let i = value.borrow().current_ip.clone();
                 let ip = ip_network.from(&value.borrow().current_ip, &ip_network.prefix);
-
+                //verify if this ip is the last ip to be consulted
+                let last = ip_network.last();
+                // ip in mask 32
+                let ip_32= ip.change_prefix(32).unwrap();
+                if ip == last {
+                        hdrs::write_alive_ip(&ip, &wr_handler);
+                        value.borrow_mut().last = true;
+                        break;
+                    }
                 // verify if  ip is in blacklist
-                let node_match_op = blist_trie.get_ancestor(&hdrs::net_to_vector(&ip));
+                let node_match_op = blist_trie.get_ancestor(&hdrs::net_to_vector(&ip_32));
                 if node_match_op.is_some() {
+                    debug!("skipped ip in blacklist");
                     value.borrow_mut().current_ip = i.add(BigUint::one());
                     it+=1;
                     continue;
                 }
                 else
-                {
-                    let last = ip_network.last();
+                {   
                     hdrs::write_alive_ip(&ip, &wr_handler);
-                    if ip == last {
-                        value.borrow_mut().last = true;
-                        break;
-                    }
                     value.borrow_mut().current_ip = i.add(BigUint::one());
                     it+=1;
                 }
             }
-            value.borrow_mut().sent +=1;
+            let n= value.borrow_mut().sent;
+            value.borrow_mut().sent += 2;
         }
-
         refresh_trie(&mut trie, &receiver);
         
         

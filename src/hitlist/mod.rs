@@ -153,9 +153,8 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>
                     it+=1;
                 }
             }
-            // grows in order 2^n
             let n= value.borrow_mut().sent;
-            value.borrow_mut().sent += n;
+            value.borrow_mut().sent += 2;
         }
 
         // if an ip was received within the network
@@ -247,6 +246,9 @@ pub fn channel_runner(networks: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>
     assert_eq!(b_trie.get_ancestor(&hdrs:: net_to_vector(&IPAddress::parse("255.255.255.245/32").unwrap())).is_some() ,true);
     assert_eq!(b_trie.get_ancestor(&hdrs:: net_to_vector(&IPAddress::parse("0.0.0.1/32").unwrap())).is_some() ,true);
 
+
+    let test_ip = IPAddress::parse("1.1.1.1").unwrap();
+    assert_eq!(test_ip.prefix.get_prefix(), 32);
  }
 
  #[test]
