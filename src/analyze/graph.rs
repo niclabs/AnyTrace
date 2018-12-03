@@ -113,6 +113,37 @@ fn analyze_paths(graph: &HashMap<Ipv4Addr, HashMap<u32, Vec<(Ipv4Addr, u32)>>>, 
     info!("max distance: {:?}", distance.iter().max_by_key(|(_, d)| *d));
     info!("Distance from 185.32.124.199: {:?}", distance.get(&("185.32.124.0".parse().unwrap(), 17)));
     info!("path for 185.32.124.199: {:?}", paths.get(&("185.32.124.0".parse().unwrap(), 17)));
+    //info!("Path to 94.139.67.0: {:?}", paths.get(&("94.139.67.0".parse().unwrap(), 23)));
+    info!("test {:?}", paths.iter().filter(|(x,_)| x.0 == "185.32.124.0".parse::<Ipv4Addr>().unwrap()).collect::<HashMap<&(Ipv4Addr, u32), &Vec<(Ipv4Addr, u32)>>>());
+
+    paths_to_asn(&paths, &asn);
+}
+
+fn paths_to_asn(paths: &HashMap<(Ipv4Addr, u32), Vec<(Ipv4Addr, u32)>>, asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
+    debug!("Transforming paths to asn paths");
+    let mut result: HashMap<(Ipv4Addr, u32), Vec<u32>> = HashMap::new();
+    let mut count: HashMap<u32, u32> = HashMap::new();
+
+    for (target, ip_path) in paths.iter() {
+        let path = result.entry(*target).or_insert(Vec::new());
+        for ip in ip_path {
+            if let Some((_, _, asn)) = asn.longest_match(ip.0) {
+                for asn in asn {
+                    if path.len() == 0 || *path.last().unwrap() != *asn {
+                        path.push(*asn);
+                        *count.entry(*asn).or_insert(0) += 1;
+                    }
+                }
+            }
+        }
+    }
+    info!("AS PATH for 185.32.124.199: {:?}", result.get(&("185.32.124.0".parse().unwrap(), 17)));
+    info!("AS PATH max: {:?}", result.iter().max_by_key(|(_,v)| v.len()));
+
+    let mut count = count.iter().map(|(x,y)| (*x,*y)).collect::<Vec<(u32,u32)>>();
+    count.sort_by_key(|(_, y)| *y);
+    count.reverse();
+    info!("First 10 most indexed ASN: {:?}", &count[0..10]);
 }
 
 pub fn graph_info() {
