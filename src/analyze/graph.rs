@@ -144,6 +144,27 @@ fn paths_to_asn(paths: &HashMap<(Ipv4Addr, u32), Vec<(Ipv4Addr, u32)>>, asn: &Ip
     count.sort_by_key(|(_, y)| *y);
     count.reverse();
     info!("First 10 most indexed ASN: {:?}", &count[0..10]);
+    check_aspath_hops(&result);
+}
+
+fn check_aspath_hops(aspath: &HashMap<(Ipv4Addr, u32), Vec<u32>>) {
+    let mut result = HashMap::new();
+
+    for (_, path) in aspath {
+        for i in 0..path.len() {
+            let mut data = result.entry(path[i]).or_insert(HashSet::new());
+            data.insert(i);
+        }
+    }
+
+    let mut count = result
+        .iter()
+        .filter(|(_, y)| y.len() > 1)
+        .map(|(x,y)| (*x, y.len() as u32))
+        .collect::<Vec<(u32,u32)>>();
+    count.sort_by_key(|(_, y)| *y);
+    count.reverse();
+    info!("Most as with multiple hop count: {:?}", &count[0..10]);
 }
 
 pub fn graph_info() {
