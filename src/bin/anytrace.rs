@@ -2,8 +2,8 @@ extern crate anytrace;
 extern crate env_logger;
 extern crate getopts;
 
-use anytrace::anytrace::PingMethod;
 use anytrace::anytrace::run;
+use anytrace::anytrace::PingMethod;
 use getopts::{Matches, Options};
 use std::env;
 use std::ops::BitXor;
@@ -77,8 +77,10 @@ fn main() {
     env_logger::init();
     if let Ok(opts) = get_options() {
         if opts.opt_present("master")
-            && (opts.opt_present("hitlist")
-                .bitxor(opts.opt_present("stdin")) == false)
+            && (opts
+                .opt_present("hitlist")
+                .bitxor(opts.opt_present("stdin"))
+                == false)
         {
             panic!("When using master, you must set either --hitlist or --stdin, and not both.");
         }

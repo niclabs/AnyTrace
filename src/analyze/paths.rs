@@ -1,9 +1,9 @@
 use analyze::helper::{asn_geoloc, load_asn, load_data};
 use std::cmp::Ordering;
+use std::collections::hash_map::Entry;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::collections::hash_map::Entry;
 use std::env;
 use std::net::Ipv4Addr;
 use std::u32;
@@ -237,7 +237,10 @@ fn calculate_latency(tracepath: &String, asnpath: &String) -> HashMap<u32, u64> 
                 if let Some(item) = item {
                     if let Some((_, _, asn)) = asndata.longest_match(item.dst) {
                         for asn in asn {
-                            latency.entry(asn.clone()).or_insert(Vec::new()).push(item.ms);
+                            latency
+                                .entry(asn.clone())
+                                .or_insert(Vec::new())
+                                .push(item.ms);
                         }
                     }
                 }
@@ -245,11 +248,25 @@ fn calculate_latency(tracepath: &String, asnpath: &String) -> HashMap<u32, u64> 
         }
     }
 
-    let mut res = latency.iter().map(|(asn, lat)| (asn, lat.iter().fold(0, |acc, x| acc + *x) / lat.iter().count() as u64)).collect::<Vec<(&u32, u64)>>();
+    let mut res = latency
+        .iter()
+        .map(|(asn, lat)| {
+            (
+                asn,
+                lat.iter().fold(0, |acc, x| acc + *x) / lat.iter().count() as u64,
+            )
+        }).collect::<Vec<(&u32, u64)>>();
     use std::u64;
     res.sort_by_key(|(_, c)| u64::MAX - *c);
     info!("Top latency AS: {:?}", &res[0..10]);
-    return latency.iter().map(|(asn, lat)| (*asn, lat.iter().fold(0, |acc, x| acc + *x) / lat.iter().count() as u64)).collect::<HashMap<u32, u64>>();;
+    return latency
+        .iter()
+        .map(|(asn, lat)| {
+            (
+                *asn,
+                lat.iter().fold(0, |acc, x| acc + *x) / lat.iter().count() as u64,
+            )
+        }).collect::<HashMap<u32, u64>>();;
 }
 
 fn pathfind_as(src: u32, target: u32, graph: &HashMap<u32, Vec<AsPath>>) -> Vec<u32> {
@@ -318,7 +335,6 @@ pub fn check_paths() {
         x += 1;
     }
 }
-
 
 // TODO: Ver si puedo cambiar los AS_SET {} a algo mas determinista, dado que no estan ordenados (puedo saber cual esta primero? Puedo usar mas de una tabla y elegir el que no usa AS_SET?) (Para esos puedo usar otra fuente como el whois?)
 //       Esto hace que no se sepa la cantidad de saltos real (esta comprimida), pero nuestro metodo igual revela el actual

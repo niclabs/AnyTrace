@@ -1,8 +1,8 @@
 extern crate treebitmap;
 
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::collections::hash_map::Entry;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::net::Ipv4Addr;
@@ -121,7 +121,8 @@ fn generate_geotable() -> IpLookupTable<Ipv4Addr, GeoLoc> {
     let mut geocode = HashMap::new();
     let f = File::open("data/GeoLite2-Country-Locations-en.csv").unwrap();
     for line in BufReader::new(f).lines().skip(1) {
-        let data = line.unwrap()
+        let data = line
+            .unwrap()
             .split(",")
             .map(|x| x.to_string())
             .collect::<Vec<String>>();
@@ -138,7 +139,8 @@ fn generate_geotable() -> IpLookupTable<Ipv4Addr, GeoLoc> {
     let mut tbl: IpLookupTable<Ipv4Addr, GeoLoc> = IpLookupTable::new();
     let f = File::open("data/GeoLite2-Country-Blocks-IPv4.csv").unwrap();
     for line in BufReader::new(f).lines().skip(1) {
-        let data = line.unwrap()
+        let data = line
+            .unwrap()
             .split(",")
             .map(|x| x.to_string())
             .collect::<Vec<String>>();
@@ -154,8 +156,7 @@ fn generate_geotable() -> IpLookupTable<Ipv4Addr, GeoLoc> {
                 .unwrap_or(&GeoLoc {
                     continent: "".to_string(),
                     country: "".to_string(),
-                })
-                .clone(),
+                }).clone(),
         );
     }
 

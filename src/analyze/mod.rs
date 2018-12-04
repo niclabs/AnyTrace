@@ -1,13 +1,13 @@
+mod graph;
 mod helper;
 mod join;
 mod paths;
-mod graph;
 
 pub use self::helper::load_data;
 
+use self::graph::graph_info;
 use self::join::join_data;
 use self::paths::check_paths;
-use self::graph::graph_info;
 
 pub enum Steps {
     JoinData,

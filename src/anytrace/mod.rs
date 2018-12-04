@@ -17,8 +17,10 @@ use std::net::Ipv4Addr;
 use std::time::{Duration, Instant};
 
 mod helper;
-use self::helper::{decode_id_seq_key, encode_id_seq_key, get_ip_mask, get_max_ttl, parse_icmp,
-                   time_from_epoch_ms, verify_packet_network};
+use self::helper::{
+    decode_id_seq_key, encode_id_seq_key, get_ip_mask, get_max_ttl, parse_icmp, time_from_epoch_ms,
+    verify_packet_network,
+};
 
 #[derive(Debug)]
 struct TraceConfiguration {
@@ -148,7 +150,9 @@ impl Anytrace {
                     if start
                         + Duration::from_secs(
                             self.handler.writer.sended_packets() / self.pps as u64,
-                        ) + Duration::from_secs(10) > Instant::now()
+                        )
+                        + Duration::from_secs(10)
+                        > Instant::now()
                     {
                         info!("Waiting for writting to finish");
                         use std::thread;
@@ -208,7 +212,8 @@ impl Anytrace {
 
             // TODO: Change rec_timeout break, as we arent counting packets that are not ours
             let mut last_update = time_from_epoch_ms();
-            while let Ok(packet) = self.handler
+            while let Ok(packet) = self
+                .handler
                 .reader
                 .reader()
                 .recv_timeout(Duration::from_millis(100))

@@ -1,8 +1,8 @@
 extern crate anytrace;
 extern crate env_logger;
 
-use anytrace::analyze::Steps;
 use anytrace::analyze::run;
+use anytrace::analyze::Steps;
 
 use std::env;
 
