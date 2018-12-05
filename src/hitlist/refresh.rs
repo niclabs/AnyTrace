@@ -137,9 +137,18 @@ pub fn refresh_file(jsonpath: &String, ipfilepath: &String, blacklist_path: Opti
      the remaining networks in the trie must be pinged*/
     loop{
         let mut mybreak = true;
+        let mut remove_vec= Vec::new();
+
         debug!("sending");
         for (key, value) in trie.iter() {
+
+            if let Err(_) = ratelimit.check() {
+                    mybreak = false;
+                    break;
+                }
+
             if value.borrow().last {
+                remove_vec.push(key.clone());
                 continue;
             }
 
@@ -197,6 +206,13 @@ pub fn refresh_file(jsonpath: &String, ipfilepath: &String, blacklist_path: Opti
             break;
         }
 
+        while remove_vec.len() > 0 {
+            let k = remove_vec.pop().unwrap();
+            trie.remove(&k);
+        }
+
+        debug!("{}new_trielen", trie.len());
+
     }
 }
 
@@ -210,6 +226,7 @@ pub fn refresh_trie(trie: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>, rece
 
     while let Ok(ip_received) = receiver.recv_timeout(Duration::from_millis(200)){
             let vec = hdrs::net_to_vector(&ip_received);
+            
             let mut first = true;
             loop {
                     let key;
@@ -220,25 +237,19 @@ pub fn refresh_trie(trie: &mut Trie<Vec<u8>, RefCell<hdrs::network_state>>, rece
                         if node_match_op.is_some() {
                             let node = node_match_op.unwrap();
                             key = node.key().unwrap().clone();
-                            let value = node.value().unwrap();
-                            let network_add = value.borrow().address.clone();
-
-                            if network_add.includes(&ip_received) {
-                                remove = true;
-                                if first {
+                            remove= true;
+                            if first {
                                     println!("{}", ip_received.to_s());
                                     first = false;
                                 }
-                                // truncate vector to ancestors length
-                                let len = key.len();
-                            }
+                            
                         } else {
                             break;
                         }
                     }
                     if remove {
-                        debug!("{}trielen",trie.len());
                         trie.remove(&key);
+                        debug!("{}trielen",trie.len());
                     }
                 }
         }

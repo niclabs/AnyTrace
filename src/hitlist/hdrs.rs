@@ -92,6 +92,11 @@ pub fn create_trie(vec: &mut Vec<String>) -> Trie<Vec<u8>, RefCell<network_state
         let ip_net = str_to_ip(&net);
         let bit_vec = net_to_vector(&ip_net);
         let host_address = ip_net.network().host_address;
+
+        if trie.get(&bit_vec).is_some()
+        {
+            continue;
+        }
         trie.insert(
             bit_vec,
             RefCell::new(network_state {
