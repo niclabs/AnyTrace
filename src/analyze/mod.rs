@@ -18,7 +18,7 @@ pub enum Steps {
 
 pub fn run(step: &Steps) {
     match step {
-        Steps::JoinData => join_data(false),
+        Steps::JoinData => join_data(true),
         Steps::Paths => check_paths(),
         Steps::Testing => graph_info(),
         _ => {}

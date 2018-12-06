@@ -93,12 +93,20 @@ pub fn join_data(log_statistics: bool) {
 }
 
 fn process_measurement(m: &mut Measurement, origin: Ipv4Addr, data: Data) {
+    while m.data.len() <= data.hops.saturating_sub(1) as usize {
+        m.data.push(None);
+        //info!("Uneven data for measurement {:?} (origin: {:?})", m, origin);
+    }
     let slice = &mut m.data[data.hops.saturating_sub(1) as usize];
     if let Some(slice) = slice {
         let identity = Ipv4Addr::new(0, 0, 0, 0);
         if !slice.measured {
             if slice.dst == identity {
                 slice.dst = data.dst;
+            }
+            if slice.dst == identity {
+                // This answer was repeated
+                return;
             }
             slice.measured = true;
             println!(

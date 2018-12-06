@@ -114,7 +114,7 @@ pub struct GeoLoc {
     pub country: String,
 }
 
-fn generate_geotable() -> IpLookupTable<Ipv4Addr, GeoLoc> {
+pub fn generate_geotable() -> IpLookupTable<Ipv4Addr, GeoLoc> {
     use std::fs::File;
     use std::io::{BufRead, BufReader};
 

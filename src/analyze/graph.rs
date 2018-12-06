@@ -1,7 +1,7 @@
 extern crate treebitmap;
 
 use self::treebitmap::IpLookupTable;
-use analyze::helper::{asn_geoloc, load_asn, load_data};
+use analyze::helper::{asn_geoloc, generate_geotable, load_asn, load_data, GeoLoc};
 use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
 use std::collections::BinaryHeap;
@@ -13,10 +13,14 @@ use std::net::Ipv4Addr;
 
 use std::u32;
 
+/// Normalize the ip address, converting it in a /24 network address
+/// by removing the list 8 bits
 fn ip_normalize(address: Ipv4Addr) -> Ipv4Addr {
     return Ipv4Addr::from(u32::from(address) & 0xFFFFFF00);
 }
 
+/// Load the traces and merge them in a HashMap by /24 network.
+/// The IP addresses in the trace are separated by the hop where they were found
 fn generate_iplink(tracepath: &String) -> HashMap<Ipv4Addr, HashMap<u32, Vec<(Ipv4Addr, u32)>>> {
     let mut data = load_data(tracepath);
     let mut merge: HashMap<Ipv4Addr, HashMap<u32, Vec<(Ipv4Addr, u32)>>> = HashMap::new();
@@ -110,11 +114,6 @@ fn generate_iplink(tracepath: &String) -> HashMap<Ipv4Addr, HashMap<u32, Vec<(Ip
             }
         )
     );
-    info!(
-        "data points for 116.251.17.0: {:?}",
-        ms.get(&"116.251.17.0".parse::<Ipv4Addr>().unwrap())
-            .unwrap()
-    );
 
     return merge;
 }
@@ -139,11 +138,12 @@ impl PartialOrd for Node {
     }
 }
 
+/// Calculate the distance and paths to every /24 network
 fn analyze_paths(
     graph: &HashMap<Ipv4Addr, HashMap<u32, Vec<(Ipv4Addr, u32)>>>,
     asn: IpLookupTable<Ipv4Addr, Vec<u32>>,
     start: (Ipv4Addr, u32),
-) {
+) -> HashMap<(Ipv4Addr, u32), u32> {
     debug!("analyze paths");
     // Join all paths as a graph, each one separated?
     let mut distance: HashMap<(Ipv4Addr, u32), u32> = HashMap::new();
@@ -153,7 +153,10 @@ fn analyze_paths(
     heap.push(Node { ip: start, dist: 0 });
     paths.insert(start, Vec::new());
 
+    //info!("test src{:?}", graph.get(&"45.71.8.0".parse::<Ipv4Addr>().unwrap()));
+
     while let Some(Node { ip, dist }) = heap.pop() {
+        debug!("ip: {:?}", ip);
         if dist > *distance.get(&(ip.0, ip.1)).unwrap_or(&u32::MAX) {
             continue;
         }
@@ -176,9 +179,9 @@ fn analyze_paths(
         }
     }
 
-    let ip: Ipv4Addr = "216.66.87.0".parse().unwrap();
+    let ip: Ipv4Addr = "190.124.27.0".parse().unwrap();
     info!(
-        "Sources of 216.66.87.118: {:?}",
+        "Sources of 190.124.27.10: {:?}",
         graph
             .iter()
             .map(|(_, v)| v
@@ -198,8 +201,8 @@ fn analyze_paths(
     );
 
     info!(
-        "Position of 185.32.124.199: {:?}",
-        graph.get(&"185.32.124.0".parse().unwrap())
+        "Position of 190.124.27.10: {:?}",
+        graph.get(&"190.124.27.0".parse().unwrap())
     );
     info!(
         "max distance: {:?}",
@@ -218,13 +221,16 @@ fn analyze_paths(
         "test {:?}",
         paths
             .iter()
-            .filter(|(x, _)| x.0 == "185.32.124.0".parse::<Ipv4Addr>().unwrap())
+            .filter(|(x, _)| x.0 == "190.124.27.0".parse::<Ipv4Addr>().unwrap())
             .collect::<HashMap<&(Ipv4Addr, u32), &Vec<(Ipv4Addr, u32)>>>()
     );
 
     paths_to_asn(&paths, &asn);
+
+    return distance;
 }
 
+/// Transform the /24 paths to AS paths
 fn paths_to_asn(
     paths: &HashMap<(Ipv4Addr, u32), Vec<(Ipv4Addr, u32)>>,
     asn: &IpLookupTable<Ipv4Addr, Vec<u32>>,
@@ -265,6 +271,7 @@ fn paths_to_asn(
     check_aspath_hops(&result);
 }
 
+/// Check the hops of a AS path graph
 fn check_aspath_hops(aspath: &HashMap<(Ipv4Addr, u32), Vec<u32>>) {
     let mut result = HashMap::new();
 
@@ -285,7 +292,57 @@ fn check_aspath_hops(aspath: &HashMap<(Ipv4Addr, u32), Vec<u32>>) {
     info!("Most as with multiple hop count: {:?}", &count[0..10]);
 }
 
+/// Geolocalize the destinations
+/// Get the /24 network count by country
+/// Get the hops to get to a country
+/// Get the ms to a country
+fn geolocalize(distances: &HashMap<(Ipv4Addr, u32), u32>, asnpath: &String) {
+    //let geo = asn_geoloc(asnpath);
+    let geo = generate_geotable();
+    //let mut result = HashMap::new();
+
+    // Remove duplicates by hop
+    let mut data = distances
+        .iter()
+        .map(|(x, _)| *x)
+        .collect::<Vec<(Ipv4Addr, u32)>>();
+    data.sort_by_key(|(ip, hops)| u32::from(*ip) | hops);
+    data.dedup_by_key(|(ip, _)| *ip);
+
+    let mut result: HashMap<GeoLoc, u32> = HashMap::new();
+    for (ip, _) in data {
+        if let Some((_, _, loc)) = geo.longest_match(ip) {
+            let current = result.entry(loc.clone()).or_insert(0);
+            *current += 1;
+        }
+    }
+
+    let mut data = result
+        .iter()
+        .map(|(x, y)| (x, *y))
+        .collect::<Vec<(&GeoLoc, u32)>>();
+    data.sort_by_key(|(_, y)| u32::MAX - y);
+    info!("max geo: {:?}", &data[0..10]);
+    info!(
+        "{:?}",
+        result
+            .iter()
+            .filter(|(x, _)| x.country == "CL")
+            .map(|(x, y)| (x, *y))
+            .collect::<Vec<(&GeoLoc, u32)>>()
+    );
+    /*
+    let mut x = 0;
+    while let Some(data) = result.get(&x) {
+        let mut loc = data.iter().collect::<Vec<(&String, &u32)>>();
+        loc.sort_by_key(|(_, c)| u32::MAX - *c);
+        info!("Locations len {}: {:?}", x, loc);
+        x += 1;
+    }*/
+}
+
 pub fn graph_info() {
+    // arica: (45.71.8.0, 0)
     let arguments = env::args().collect::<Vec<String>>();
     if arguments.len() < 4 {
         panic!("Argments: <traces.csv> <asn.csv>");
@@ -295,5 +352,17 @@ pub fn graph_info() {
 
     let graph = generate_iplink(&tracepath);
     let asn = load_asn(&asnpath);
-    analyze_paths(&graph, asn, (Ipv4Addr::new(200, 7, 6, 0), 1));
+    let distance = analyze_paths(&graph, asn, (Ipv4Addr::new(45, 71, 8, 0), 0));
+    geolocalize(&distance, &asnpath);
 }
+
+// Define distance as (origin, middle, out) for every asn
+// In this way, we make sure that this systems take into account the total distance to get to the destination.
+// Tests get defines as a dummy node to the origin to the next.
+// (Dummy -> Origin -> Target) == ping Target
+// (Origin -> Target -> B2)
+
+// Uso un dump de traceroutes para hacer mi mapa de /24 como lo hice con los otros
+// Transformar la matriz
+// Con eso me armo mi matriz de distancia bidireccional
+//
