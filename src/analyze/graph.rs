@@ -322,9 +322,9 @@ fn geolocalize(distances: &HashMap<(Ipv4Addr, u32), u32>, asnpath: &String) {
         .map(|(x, y)| (x, *y))
         .collect::<Vec<(&GeoLoc, u32)>>();
     data.sort_by_key(|(_, y)| u32::MAX - y);
-    info!("max geo: {:?}", &data[0..10]);
+    info!("max geo: {:?}", &data[0..10.min(data.len())]);
     info!(
-        "{:?}",
+        "Chile: {:?}",
         result
             .iter()
             .filter(|(x, _)| x.country == "CL")
@@ -343,6 +343,9 @@ fn geolocalize(distances: &HashMap<(Ipv4Addr, u32), u32>, asnpath: &String) {
 
 pub fn graph_info() {
     // arica: (45.71.8.0, 0)
+    // merced: (200.1.123.0, 0)
+    // saopaulo: (200.160.0.0, 0)
+    // tucapel: (190.153.177.0, 0)
     let arguments = env::args().collect::<Vec<String>>();
     if arguments.len() < 4 {
         panic!("Argments: <traces.csv> <asn.csv>");
@@ -352,7 +355,7 @@ pub fn graph_info() {
 
     let graph = generate_iplink(&tracepath);
     let asn = load_asn(&asnpath);
-    let distance = analyze_paths(&graph, asn, (Ipv4Addr::new(45, 71, 8, 0), 0));
+    let distance = analyze_paths(&graph, asn, (Ipv4Addr::new(190, 153, 177, 0), 0));
     geolocalize(&distance, &asnpath);
 }
 

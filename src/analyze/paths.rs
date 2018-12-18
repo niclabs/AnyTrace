@@ -335,6 +335,3 @@ pub fn check_paths() {
         x += 1;
     }
 }
-
-// TODO: Ver si puedo cambiar los AS_SET {} a algo mas determinista, dado que no estan ordenados (puedo saber cual esta primero? Puedo usar mas de una tabla y elegir el que no usa AS_SET?) (Para esos puedo usar otra fuente como el whois?)
-//       Esto hace que no se sepa la cantidad de saltos real (esta comprimida), pero nuestro metodo igual revela el actual
