@@ -1,17 +1,15 @@
 # AnyTrace
 AnyTrace is a tool used to detect the area of service of many anycast servers d$
 
-# Running
-All the executables need root access to create the sockets and listen to the ICMP packets.
+# Dependencies
+for python:
+- pytricia
+for rust:
+- IPAdress
+- radix_trie 
+rust dependencies versions specified in the Cargo.toml file
 
-To run the example:
-```
-cargo run --bin example
-```
-To generate the ip hitlist:
-```
-cargo run --bin hitlist
-```
+# Running
 
 # Hitlist
 hitlist is a program that generates a file of alive ips.  
@@ -36,16 +34,18 @@ The user must edit **/hitlist/mod.rs** line 81 to the local ip of the device run
 - to run hitlist :
 
 ```
-cargo build && sudo RUST_LOG=DEBUG ./target/debug/hitlist data/asn_prefixes.json data/blacklist.txt> filename
+cargo build && sudo RUST_LOG=DEBUG ./target/debug/hitlist data/asn_prefixes.json data/blacklist.txt > filename
 
 ```
 
 - to refresh the file
 
 ```
-cargo build && sudo RUST_LOG=DEBUG ./target/debug/refresh data/asn_prefixes.json filename data/blacklist.txt> refresh
+cargo build && sudo RUST_LOG=DEBUG ./target/debug/refresh data/asn_prefixes.json filename local_ip data/blacklist.txt  > refresh
 
 ```
+
+where filename is a previous file of alive ips. in the case of no previous ips, an empty file can be passed.
 
 # BlackList and coverage
 To generate a blacklist of networks that should not be pinged a python code is provided:

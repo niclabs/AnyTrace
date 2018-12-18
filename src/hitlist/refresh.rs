@@ -40,7 +40,7 @@ use std::sync::Mutex;
 use std::thread;
 use ::hitlist::hdrs;
 
-pub fn refresh_file(jsonpath: &String, ipfilepath: &String, blacklist_path: Option<&String>)
+pub fn refresh_file(jsonpath: &String, ipfilepath: &String, local_ip: &String, blacklist_path: Option<&String>)
 {   
     //creating trie from asn file
     let mut jsonfile = File::open(jsonpath).unwrap();
@@ -83,7 +83,7 @@ pub fn refresh_file(jsonpath: &String, ipfilepath: &String, blacklist_path: Opti
     //initilizing handler for ping
     let rate= 10000;
     let handler = PingHandlerBuilder::new()
-        .localip("172.30.65.57")
+        .localip(local_ip)
         .method(PingMethod::ICMP)
         .rate_limit(rate)
         .build();
