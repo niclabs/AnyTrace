@@ -1,13 +1,13 @@
 extern crate treebitmap;
 
 use self::treebitmap::IpLookupTable;
-use analyze::helper::{asn_geoloc, generate_geotable, load_asn, load_data, GeoLoc};
+use analyze::helper::{
+    asn_geoloc, generate_citytable, generate_geotable, load_asn, load_data, GeoLoc,
+};
 use std::cmp::Ordering;
-use std::collections::hash_map::Entry;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::collections::VecDeque;
 use std::env;
 use std::net::Ipv4Addr;
 
@@ -346,6 +346,7 @@ pub fn graph_info() {
     // merced: (200.1.123.0, 0)
     // saopaulo: (200.160.0.0, 0)
     // tucapel: (190.153.177.0, 0)
+    generate_citytable();
     let arguments = env::args().collect::<Vec<String>>();
     if arguments.len() < 4 {
         panic!("Argments: <traces.csv> <asn.csv>");

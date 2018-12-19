@@ -187,3 +187,44 @@ pub fn asn_geoloc(asnpath: &String) -> HashMap<u32, HashSet<GeoLoc>> {
     }
     return result;
 }
+
+#[derive(Debug)]
+pub struct CityLoc {
+    latitude: f64,
+    longitude: f64,
+    accuracy: u32,
+}
+
+pub fn generate_citytable() -> IpLookupTable<Ipv4Addr, CityLoc> {
+    debug!("Loading citytable");
+    let mut tbl: IpLookupTable<Ipv4Addr, CityLoc> = IpLookupTable::new();
+    let f = File::open("data/GeoLite2-City-Blocks-IPv4.csv").unwrap();
+    for line in BufReader::new(f).lines().skip(1) {
+        let data = line
+            .unwrap()
+            .split(",")
+            .map(|x| x.to_string())
+            .collect::<Vec<String>>();
+        debug!("{:?}", data);
+        if data[7] == "" || data[8] == "" || data[9] == "" {
+            continue;
+        }
+
+        let network = data[0].split("/").collect::<Vec<&str>>();
+        let ip: Ipv4Addr = network[0].parse().unwrap();
+        let netmask: u32 = network[1].parse().unwrap();
+        let latitude: f64 = data[7].parse().unwrap();
+        let longitude: f64 = data[8].parse().unwrap();
+        let accuracy: u32 = data[9].parse().unwrap();
+        tbl.insert(
+            ip,
+            netmask,
+            CityLoc {
+                latitude: latitude,
+                longitude: longitude,
+                accuracy: accuracy,
+            },
+        );
+    }
+    return tbl;
+}
