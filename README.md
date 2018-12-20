@@ -22,7 +22,7 @@ The structure of the json file must be the following:
 for example:  
 - {"42708": ["0.0.0.0/0", "5.198.248.0/21"]}  
 
-Aditionally in order to avoid pinging Networks that do not support ICMP, it is highlt  
+Aditionally in order to avoid pinging Networks that do not support ICMP, it is highly 
 recomended to provide a **blacklist.txt** file of those networks that should not be consulted.  
 Not doing so, could derive in congestion, and possible looping.
 
@@ -38,17 +38,17 @@ cargo build && sudo RUST_LOG=DEBUG ./target/debug/refresh data/asn_prefixes.json
 
 ```
 
-where **alive_ips** is a previous file of alive ips that the user wishes to refresh (verify if still alive).  
+where **alive_ips** is a previous file of alive ips, that the user wishes to refresh (verify if still alive).  
 In the case of no previous ips, an empty file can be passed.  
 local_ip is the public ip of the network in use, while black_list is an "optional" parameter.  
-Results should appear in the refresh file.
+Results should appear in the **refresh** file.
 
 # BlackList and coverage
 To generate a blacklist of networks that should not be pinged a python code is provided:
 
 ## Running 
 
-- the user must be in the root folder
+- the user must be in the root folder of the project
 
 ```
 pyhon3 src/hitlist/statistics.py blacklist <path_to_json_file> <path_file_generated_by_hitlist>
