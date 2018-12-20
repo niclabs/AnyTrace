@@ -3,7 +3,8 @@ AnyTrace is a tool used to detect the area of service of many anycast servers d$
 
 # Dependencies
 for python:
-- pytricia
+- pytricia  
+
 for rust:
 - IPAdress
 - radix_trie 
