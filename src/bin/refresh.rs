@@ -11,7 +11,7 @@ fn main() {
    
     let json_path= &arguments[1];
     let ip_path= &arguments[2];
-    let local_up= &arguments[3]
+    let local_ip= &arguments[3];
     let blacklist_path= arguments.get(4);
-    refresh_file(json_path, ip_path, ip_path, blacklist_path);
+    refresh_file(json_path, ip_path, local_ip, blacklist_path);
 }

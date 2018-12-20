@@ -7,7 +7,7 @@ for python:
 for rust:
 - IPAdress
 - radix_trie 
-rust dependencies versions specified in the Cargo.toml file
+other rust dependencies specified in the Cargo.toml file
 
 # Running
 
@@ -23,29 +23,24 @@ for example:
 
 Aditionally in order to avoid pinging Networks that do not support ICMP, it is highlt  
 recomended to provide a **blacklist.txt** file of those networks that should not be consulted.  
-Not doing so could derive in congestion, and possible looping.
+Not doing so, could derive in congestion, and possible looping.
 
 
 ## Running hitlist
-running with debbuging options are recommended. The user must be positioned in root proyect folder.
+running with debbuging options are recommended. The user must be positioned in root project folder.
 
-The user must edit **/hitlist/mod.rs** line 81 to the local ip of the device running the program.
 
-- to run hitlist :
-
-```
-cargo build && sudo RUST_LOG=DEBUG ./target/debug/hitlist data/asn_prefixes.json data/blacklist.txt > filename
+- to run hitlist and  refresh the file
 
 ```
-
-- to refresh the file
-
-```
-cargo build && sudo RUST_LOG=DEBUG ./target/debug/refresh data/asn_prefixes.json filename local_ip data/blacklist.txt  > refresh
+cargo build && sudo RUST_LOG=DEBUG ./target/debug/refresh data/asn_prefixes.json data/alive_ips local_ip data/blacklist.txt  > refresh
 
 ```
 
-where filename is a previous file of alive ips. in the case of no previous ips, an empty file can be passed.
+where **alive_ips** is a previous file of alive ips that the user wishes to refresh (verify if still alive).  
+In the case of no previous ips, an empty file can be passed.  
+local_ip is the public ip of the network in use, while black_list is an "optional" parameter.  
+Results should appear in the refresh file.
 
 # BlackList and coverage
 To generate a blacklist of networks that should not be pinged a python code is provided:
@@ -74,5 +69,5 @@ pyhon3 src/hitlist/statistics.py <stat name> <path1> <path2>
 
 
 ## ASSUMPTIONS(IMPORTANT):
-- the trie used doesnt support /0 prefixes,
+- the trie used doesn't support /0 prefixes,
 - to ignore every possible ip use both 1.0.0.0/1, 128.0.0.0/1 networks
