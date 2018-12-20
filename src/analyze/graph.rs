@@ -1,8 +1,12 @@
 extern crate treebitmap;
+extern crate geo;
+
+use self::geo::Point;
+use self::geo::prelude::*;
 
 use self::treebitmap::IpLookupTable;
 use analyze::helper::{
-    asn_geoloc, generate_citytable, generate_geotable, load_asn, load_data, GeoLoc,
+    asn_geoloc, generate_citytable, generate_geotable, load_asn, load_data, GeoLoc, CityLoc,
 };
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
@@ -156,7 +160,6 @@ fn analyze_paths(
     //info!("test src{:?}", graph.get(&"45.71.8.0".parse::<Ipv4Addr>().unwrap()));
 
     while let Some(Node { ip, dist }) = heap.pop() {
-        debug!("ip: {:?}", ip);
         if dist > *distance.get(&(ip.0, ip.1)).unwrap_or(&u32::MAX) {
             continue;
         }
@@ -346,7 +349,6 @@ pub fn graph_info() {
     // merced: (200.1.123.0, 0)
     // saopaulo: (200.160.0.0, 0)
     // tucapel: (190.153.177.0, 0)
-    generate_citytable();
     let arguments = env::args().collect::<Vec<String>>();
     if arguments.len() < 4 {
         panic!("Argments: <traces.csv> <asn.csv>");
@@ -356,8 +358,53 @@ pub fn graph_info() {
 
     let graph = generate_iplink(&tracepath);
     let asn = load_asn(&asnpath);
-    let distance = analyze_paths(&graph, asn, (Ipv4Addr::new(190, 153, 177, 0), 0));
+    let distance = analyze_paths(&graph, asn, (Ipv4Addr::new(200,160,0,0), 0));
     geolocalize(&distance, &asnpath);
+
+    // Distance test
+    let city = generate_citytable();
+    geotest(&distance, &city)
+}
+
+
+fn geotest(graph: &HashMap<(Ipv4Addr, u32), u32>, city: &IpLookupTable<Ipv4Addr, CityLoc>) {
+    // format: (lat, long)
+    // merced: (-33.4379781,-70.6492055)
+    // tucapel: (-37.292304,-71.9599734)
+    // arica: (-18.4724638,-70.3591886)
+    // saopaulo: (-23.6821604,-46.8754996)
+    // Note: geo library use (long, lat)
+    let locs = [
+        (Point::<f64>::from((-70.6492055, -33.4379781)), "merced"),
+        (Point::<f64>::from((-71.9599734, -37.292304)), "tucapel"),
+        (Point::<f64>::from((-70.3591886, -18.4724638)), "arica"),
+        (Point::<f64>::from((-46.8754996, -23.6821604)), "saopaulo"),
+    ];
+
+    let mut uniq = HashSet::new();
+    for ((ip, _), _) in graph.iter() {
+        uniq.insert(*ip);
+    }
+
+    let mut result = HashMap::new();
+    for ip in uniq.iter() {
+        if let Some((_, _, loc)) = city.longest_match(*ip) {
+            if loc.accuracy >= 1000 {
+                continue;
+            }
+            let current = Point::<f64>::from((loc.longitude, loc.latitude));
+            let mut dist = (locs[0].0.haversine_distance(&current), locs[0].1);
+            for loc in locs.iter().skip(1) {
+                let next = loc.0.haversine_distance(&current);
+                if next < dist.0 {
+                    dist = (next, loc.1);
+                }
+            }
+            *result.entry(dist.1).or_insert(0) += 1;
+        }
+    }
+    info!("Distance assignations: {:?}", result);
+    load_weights();
 }
 
 // Define distance as (origin, middle, out) for every asn

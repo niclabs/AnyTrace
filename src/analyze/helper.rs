@@ -190,9 +190,9 @@ pub fn asn_geoloc(asnpath: &String) -> HashMap<u32, HashSet<GeoLoc>> {
 
 #[derive(Debug)]
 pub struct CityLoc {
-    latitude: f64,
-    longitude: f64,
-    accuracy: u32,
+    pub latitude: f64,
+    pub longitude: f64,
+    pub accuracy: u32,
 }
 
 pub fn generate_citytable() -> IpLookupTable<Ipv4Addr, CityLoc> {
@@ -205,7 +205,7 @@ pub fn generate_citytable() -> IpLookupTable<Ipv4Addr, CityLoc> {
             .split(",")
             .map(|x| x.to_string())
             .collect::<Vec<String>>();
-        debug!("{:?}", data);
+
         if data[7] == "" || data[8] == "" || data[9] == "" {
             continue;
         }

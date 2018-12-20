@@ -10,6 +10,7 @@ log = "0.4.4"
 env_logger = "0.5.13"
 treebitmap = "0.3.0"
 rayon = "1.0.3"
+geo = "0.10.3"
 
 
 [dependencies.pnet]
