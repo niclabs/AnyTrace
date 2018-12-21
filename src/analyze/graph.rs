@@ -1,12 +1,17 @@
 extern crate treebitmap;
 extern crate geo;
+extern crate flate2;
+
+use std::io::prelude::*;
+use self::flate2::read::GzDecoder;
+
 
 use self::geo::Point;
 use self::geo::prelude::*;
 
 use self::treebitmap::IpLookupTable;
 use analyze::helper::{
-    asn_geoloc, generate_citytable, generate_geotable, load_asn, load_data, GeoLoc, CityLoc,
+    asn_geoloc, generate_citytable, generate_geotable, load_asn, load_data, GeoLoc, CityLoc, ip_normalize, load_area
 };
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
@@ -17,12 +22,6 @@ use std::net::Ipv4Addr;
 
 use std::u32;
 
-/// Normalize the ip address, converting it in a /24 network address
-/// by removing the list 8 bits
-fn ip_normalize(address: Ipv4Addr) -> Ipv4Addr {
-    return Ipv4Addr::from(u32::from(address) & 0xFFFFFF00);
-}
-
 /// Load the traces and merge them in a HashMap by /24 network.
 /// The IP addresses in the trace are separated by the hop where they were found
 fn generate_iplink(tracepath: &String) -> HashMap<Ipv4Addr, HashMap<u32, Vec<(Ipv4Addr, u32)>>> {
@@ -32,11 +31,12 @@ fn generate_iplink(tracepath: &String) -> HashMap<Ipv4Addr, HashMap<u32, Vec<(Ip
 
     debug!("Merging data on generate_iplink");
 
-    for (_, measurement) in data.iter() {
+    for (_xxx, measurement) in data.iter() {
         let data = &measurement.data;
         let l = data.len();
 
         for m in data {
+            // latency measurement
             if let Some(m) = m {
                 let current = ms
                     .entry(ip_normalize(m.dst))
@@ -52,6 +52,7 @@ fn generate_iplink(tracepath: &String) -> HashMap<Ipv4Addr, HashMap<u32, Vec<(Ip
                         if origin.dst == destination.dst {
                             break;
                         }
+
                         merge
                             .entry(ip_normalize(origin.dst))
                             .or_insert(HashMap::new())
@@ -145,10 +146,11 @@ impl PartialOrd for Node {
 /// Calculate the distance and paths to every /24 network
 fn analyze_paths(
     graph: &HashMap<Ipv4Addr, HashMap<u32, Vec<(Ipv4Addr, u32)>>>,
-    asn: IpLookupTable<Ipv4Addr, Vec<u32>>,
+    asn: &IpLookupTable<Ipv4Addr, Vec<u32>>,
     start: (Ipv4Addr, u32),
 ) -> HashMap<(Ipv4Addr, u32), u32> {
     debug!("analyze paths");
+
     // Join all paths as a graph, each one separated?
     let mut distance: HashMap<(Ipv4Addr, u32), u32> = HashMap::new();
     let mut paths = HashMap::<(Ipv4Addr, u32), Vec<(Ipv4Addr, u32)>>::with_capacity(graph.len());
@@ -299,22 +301,12 @@ fn check_aspath_hops(aspath: &HashMap<(Ipv4Addr, u32), Vec<u32>>) {
 /// Get the /24 network count by country
 /// Get the hops to get to a country
 /// Get the ms to a country
-fn geolocalize(distances: &HashMap<(Ipv4Addr, u32), u32>, asnpath: &String) {
-    //let geo = asn_geoloc(asnpath);
+fn geolocalize(area: &HashMap<Ipv4Addr, Vec<u64>>) {
     let geo = generate_geotable();
-    //let mut result = HashMap::new();
-
-    // Remove duplicates by hop
-    let mut data = distances
-        .iter()
-        .map(|(x, _)| *x)
-        .collect::<Vec<(Ipv4Addr, u32)>>();
-    data.sort_by_key(|(ip, hops)| u32::from(*ip) | hops);
-    data.dedup_by_key(|(ip, _)| *ip);
 
     let mut result: HashMap<GeoLoc, u32> = HashMap::new();
-    for (ip, _) in data {
-        if let Some((_, _, loc)) = geo.longest_match(ip) {
+    for (ip, _) in area.iter() {
+        if let Some((_, _, loc)) = geo.longest_match(*ip) {
             let current = result.entry(loc.clone()).or_insert(0);
             *current += 1;
         }
@@ -344,6 +336,64 @@ fn geolocalize(distances: &HashMap<(Ipv4Addr, u32), u32>, asnpath: &String) {
     }*/
 }
 
+fn geolocalize_asnaware(area: &HashMap<Ipv4Addr, Vec<u64>>, asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
+    let geo = generate_geotable();
+
+    // for every location, add to a hashset of ASN to count
+    let mut geoasn: HashMap<GeoLoc, HashSet<u32>> = HashMap::new();
+    for (ip, _) in area.iter() {
+        if let Some((_, _, loc)) = geo.longest_match(*ip) {
+            if let Some((_, _, asn)) = asn.longest_match(*ip) {
+                for asn in asn {
+                    geoasn.entry(loc.clone()).or_insert(HashSet::new()).insert(*asn);
+                }
+            }
+        }
+    }
+
+    // Transform the hashset to count
+    let mut result = geoasn.iter().map(|(x, y)| (x, y.len() as u32)).collect::<Vec<(&GeoLoc, u32)>>();
+    result.sort_by_key(|(_, y)| u32::MAX - *y);
+    info!("Max locations by ASN: {:?}", &result[0..10.min(result.len())]);
+    info!(
+        "Chile ASN: {:?}",
+        result
+            .iter()
+            .filter(|(x, _)| x.country == "CL")
+            .map(|(x, y)| (x, *y))
+            .collect::<Vec<(&&GeoLoc, u32)>>()
+    );
+}
+
+fn geolocalize_weighted(area: &HashMap<Ipv4Addr, Vec<u64>>) {
+    let weight = load_weights(area);
+    let geo = generate_geotable();
+
+    let mut result: HashMap<GeoLoc, f64> = HashMap::new();
+    for (ip, _) in area.iter() {
+        if let Some((_, _, loc)) = geo.longest_match(*ip) {
+            let current = result.entry(loc.clone()).or_insert(0f64);
+            *current += weight.get(ip).unwrap_or(&0f64);
+        }
+    }
+
+    let mut data = result
+        .iter()
+        .map(|(x, y)| (x, *y))
+        .collect::<Vec<(&GeoLoc, f64)>>();
+    data.sort_by_key(|(_, y)| (*y * 100000f64) as u64);
+    data.reverse();
+    info!("Weighted max geo: {:?}", &data[0..10.min(data.len())]);
+    info!(
+        "Chile Weight: {:?}",
+        result
+            .iter()
+            .filter(|(x, _)| x.country == "CL")
+            .map(|(x, y)| (x, *y))
+            .collect::<Vec<(&GeoLoc, f64)>>()
+    );
+}
+
 pub fn graph_info() {
     // arica: (45.71.8.0, 0)
     // merced: (200.1.123.0, 0)
@@ -358,36 +408,34 @@ pub fn graph_info() {
 
     let graph = generate_iplink(&tracepath);
     let asn = load_asn(&asnpath);
-    let distance = analyze_paths(&graph, asn, (Ipv4Addr::new(200,160,0,0), 0));
-    geolocalize(&distance, &asnpath);
+    let distance = analyze_paths(&graph, &asn, (Ipv4Addr::new(200,1,123,0), 0));
+
+    let area = load_area(&tracepath);
+    geolocalize(&area);
+    geolocalize_weighted(&area);
+    geolocalize_asnaware(&area, &asn);
 
     // Distance test
     let city = generate_citytable();
-    geotest(&distance, &city)
+    geotest_weighted(&area, &city);
 }
 
-
-fn geotest(graph: &HashMap<(Ipv4Addr, u32), u32>, city: &IpLookupTable<Ipv4Addr, CityLoc>) {
-    // format: (lat, long)
-    // merced: (-33.4379781,-70.6492055)
-    // tucapel: (-37.292304,-71.9599734)
-    // arica: (-18.4724638,-70.3591886)
-    // saopaulo: (-23.6821604,-46.8754996)
-    // Note: geo library use (long, lat)
+fn geotest_weighted(area: &HashMap<Ipv4Addr, Vec<u64>>, city: &IpLookupTable<Ipv4Addr, CityLoc>){
+    let weight = load_weights(area);
     let locs = [
         (Point::<f64>::from((-70.6492055, -33.4379781)), "merced"),
         (Point::<f64>::from((-71.9599734, -37.292304)), "tucapel"),
         (Point::<f64>::from((-70.3591886, -18.4724638)), "arica"),
         (Point::<f64>::from((-46.8754996, -23.6821604)), "saopaulo"),
+        (Point::<f64>::from((14.3255398, 50.0598058)), "praga"),
+        (Point::<f64>::from((4.7585393, 52.354775)), "amsterdam"),
+        (Point::<f64>::from((-118.4230595, 34.0784411)), "elsegundo"),
+        (Point::<f64>::from((-100.4431833, 25.6490376)), "monterreya"),
     ];
 
-    let mut uniq = HashSet::new();
-    for ((ip, _), _) in graph.iter() {
-        uniq.insert(*ip);
-    }
-
     let mut result = HashMap::new();
-    for ip in uniq.iter() {
+    let mut result_count = HashMap::new();
+    for (ip, _) in area.iter() {
         if let Some((_, _, loc)) = city.longest_match(*ip) {
             if loc.accuracy >= 1000 {
                 continue;
@@ -400,11 +448,51 @@ fn geotest(graph: &HashMap<(Ipv4Addr, u32), u32>, city: &IpLookupTable<Ipv4Addr,
                     dist = (next, loc.1);
                 }
             }
-            *result.entry(dist.1).or_insert(0) += 1;
+            *result.entry(dist.1).or_insert(0f64) += 1f64 * *weight.get(ip).unwrap_or(&0f64);
+            *result_count.entry(dist.1).or_insert(0) += 1;
         }
     }
-    info!("Distance assignations: {:?}", result);
-    load_weights();
+
+    info!("Distance assigned: {:?}", result_count);
+    info!("Weighted distance assignations: {:?} (sum {})", result, result.iter().map(|(_, y)| *y).sum::<f64>()); // Sum is unlocated info
+}
+
+fn load_weights(area: &HashMap<Ipv4Addr, Vec<u64>>) -> HashMap<Ipv4Addr, f64> {
+    use std::fs::File;
+    use std::io::BufReader;
+
+    let f = File::open("data/merced.gz").unwrap();
+    let zip = GzDecoder::new(f);
+
+    let mut result = HashMap::new();
+    for line in BufReader::new(zip).lines() {
+        let data = line.unwrap();
+        let r = data.split("\t").collect::<Vec<&str>>();;
+        let ip: Ipv4Addr = ip_normalize(r[1].parse().unwrap());
+        if area.contains_key(&ip) {
+            *result.entry(ip).or_insert(0) += 1;
+        }
+    }
+
+    // Normalize the result
+    let sum: f64 = result.iter().map(|(_, x)| *x).sum::<u32>() as f64;
+    let normalized = result.iter().map(|(x, y)| (*x, (*y as f64)/sum)).collect::<HashMap<Ipv4Addr, f64>>();
+
+    {
+        let mut count = result.iter().collect::<Vec<(&Ipv4Addr, &u32)>>();
+        count.sort_by_key(|(_, y)| *y);
+        count.reverse();
+        trace!("Most weight table: {:?}", &count[0..10]);
+    }
+    {
+        let mut count = normalized.iter().collect::<Vec<(&Ipv4Addr, &f64)>>();
+        count.sort_by_key(|(_, y)| (*y * 100000f64) as u64);
+        count.reverse();
+        trace!("Most weight table: {:?}", &count[0..10]);
+    }
+
+
+    return normalized;
 }
 
 // Define distance as (origin, middle, out) for every asn

@@ -9,6 +9,14 @@ use std::net::Ipv4Addr;
 
 use self::treebitmap::IpLookupTable;
 
+use std::u32;
+
+/// Normalize the ip address, converting it in a /24 network address
+/// by removing the list 8 bits
+pub fn ip_normalize(address: Ipv4Addr) -> Ipv4Addr {
+    return Ipv4Addr::from(u32::from(address) & 0xFFFFFF00);
+}
+
 #[derive(Debug, Clone)]
 pub struct Data {
     pub dst: Ipv4Addr,
@@ -73,7 +81,40 @@ pub fn load_data(tracepath: &String) -> HashMap<Ipv4Addr, Measurement> {
         }
     }
 
+    let mut uniq = HashSet::new();
+    for (ip, m) in map.iter() {
+        uniq.insert(*ip);
+        for i in m.data.iter() {
+            if let Some(x) = i {
+                uniq.insert(x.dst);
+            }
+        }
+    }
+    info!("Uniq prefixes: {}", uniq.len());
     return map;
+}
+
+/// Load the area of service, return the /24 addresses and a vector with the milliseconds
+pub fn load_area(tracepath: &String) -> HashMap<Ipv4Addr, Vec<u64>> {
+    let f = File::open(tracepath).unwrap();
+    let mut result = HashMap::new();
+
+    for line in BufReader::new(f).lines() {
+        let line = line.unwrap();
+        let data = line.split(",").collect::<Vec<&str>>();
+        let real_dst: Ipv4Addr = data[0].parse().unwrap();
+        let dst: Ipv4Addr = data[1].parse().unwrap();
+        let hops: u8 = data[2].parse().unwrap();
+        let ms: u64 = data[3].parse().unwrap();
+
+        if dst.is_private() {
+            continue;
+        }
+
+        result.entry(ip_normalize(dst)).or_insert(Vec::new()).push(ms);
+    }
+
+    return result;
 }
 
 pub fn load_asn(asnpath: &String) -> IpLookupTable<Ipv4Addr, Vec<u32>> {
