@@ -1,4 +1,8 @@
+extern crate flate2;
 extern crate treebitmap;
+
+use self::flate2::read::GzDecoder;
+use std::io::prelude::*;
 
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
@@ -102,16 +106,19 @@ pub fn load_area(tracepath: &String) -> HashMap<Ipv4Addr, Vec<u64>> {
     for line in BufReader::new(f).lines() {
         let line = line.unwrap();
         let data = line.split(",").collect::<Vec<&str>>();
-        let real_dst: Ipv4Addr = data[0].parse().unwrap();
+        let _real_dst: Ipv4Addr = data[0].parse().unwrap();
         let dst: Ipv4Addr = data[1].parse().unwrap();
-        let hops: u8 = data[2].parse().unwrap();
+        let _hops: u8 = data[2].parse().unwrap();
         let ms: u64 = data[3].parse().unwrap();
 
         if dst.is_private() {
             continue;
         }
 
-        result.entry(ip_normalize(dst)).or_insert(Vec::new()).push(ms);
+        result
+            .entry(ip_normalize(dst))
+            .or_insert(Vec::new())
+            .push(ms);
     }
 
     return result;
@@ -268,4 +275,44 @@ pub fn generate_citytable() -> IpLookupTable<Ipv4Addr, CityLoc> {
         );
     }
     return tbl;
+}
+
+pub fn load_weights(filter: &HashMap<Ipv4Addr, Vec<u64>>) -> HashMap<Ipv4Addr, f64> {
+    use std::fs::File;
+    use std::io::BufReader;
+
+    let f = File::open("data/merced.gz").unwrap();
+    let zip = GzDecoder::new(f);
+
+    let mut result = HashMap::new();
+    for line in BufReader::new(zip).lines() {
+        let data = line.unwrap();
+        let r = data.split("\t").collect::<Vec<&str>>();;
+        let ip: Ipv4Addr = ip_normalize(r[1].parse().unwrap());
+        if filter.contains_key(&ip) {
+            *result.entry(ip).or_insert(0) += 1;
+        }
+    }
+
+    // Normalize the result
+    let sum: f64 = result.iter().map(|(_, x)| *x).sum::<u32>() as f64;
+    let normalized = result
+        .iter()
+        .map(|(x, y)| (*x, (*y as f64) / sum))
+        .collect::<HashMap<Ipv4Addr, f64>>();
+
+    {
+        let mut count = result.iter().collect::<Vec<(&Ipv4Addr, &u32)>>();
+        count.sort_by_key(|(_, y)| *y);
+        count.reverse();
+        trace!("Most weight table: {:?}", &count[0..10]);
+    }
+    {
+        let mut count = normalized.iter().collect::<Vec<(&Ipv4Addr, &f64)>>();
+        count.sort_by_key(|(_, y)| (*y * 100000f64) as u64);
+        count.reverse();
+        trace!("Most weight table: {:?}", &count[0..10]);
+    }
+
+    return normalized;
 }

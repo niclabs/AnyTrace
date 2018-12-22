@@ -232,7 +232,7 @@ fn calculate_latency(tracepath: &String, asnpath: &String) -> HashMap<u32, u64> 
         let data = load_data(tracepath);
         for (_, measurement) in data.iter() {
             let data = &measurement.data;
-            let l = data.len();
+            let _l = data.len();
             for item in data {
                 if let Some(item) = item {
                     if let Some((_, _, asn)) = asndata.longest_match(item.dst) {
