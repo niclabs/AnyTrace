@@ -2,7 +2,6 @@ extern crate flate2;
 extern crate treebitmap;
 
 use self::flate2::read::GzDecoder;
-use std::io::prelude::*;
 
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
@@ -211,7 +210,7 @@ pub fn generate_geotable() -> IpLookupTable<Ipv4Addr, GeoLoc> {
     return tbl;
 }
 
-pub fn asn_geoloc(asnpath: &String) -> HashMap<u32, HashSet<GeoLoc>> {
+/*pub fn asn_geoloc(asnpath: &String) -> HashMap<u32, HashSet<GeoLoc>> {
     let mut result: HashMap<u32, HashSet<GeoLoc>> = HashMap::new();
     let geo = generate_geotable();
     let f = File::open(asnpath).unwrap();
@@ -234,7 +233,7 @@ pub fn asn_geoloc(asnpath: &String) -> HashMap<u32, HashSet<GeoLoc>> {
         }
     }
     return result;
-}
+}*/
 
 #[derive(Debug)]
 pub struct CityLoc {

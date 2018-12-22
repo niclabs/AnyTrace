@@ -1,5 +1,4 @@
 extern crate treebitmap;
-use std::io::prelude::*;
 
 use self::treebitmap::IpLookupTable;
 use analyze::helper::{load_area, load_asn, load_weights};
@@ -25,7 +24,7 @@ pub fn check_latency() {
     let area = load_area(&tracepath);
 
     bucket_data(&area);
-    bucket_data_as(&area, &asn); // TODO: Add weights (Normalize) (get total weight, filter by area, generate)
+    bucket_data_as(&area, &asn);
     bucket_data_weighted(&area);
 }
 
@@ -97,8 +96,7 @@ fn bucket_data_as(area: &HashMap<Ipv4Addr, Vec<u64>>, asn: &IpLookupTable<Ipv4Ad
     info!("AS Buckets: {:?}", buckets);
 }
 
-// [%clientes, %clientes, %clientes, %clientes]
-// Tomar todos los datos, filtrar por area de servicio, sacar porcentajes
+// Get the bucket weights by percentage
 fn bucket_data_weighted(area: &HashMap<Ipv4Addr, Vec<u64>>) {
     let weight = load_weights(area);
     const BUCKETS_COUNT: usize = 50;

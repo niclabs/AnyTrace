@@ -6,7 +6,7 @@ use self::geo::Point;
 
 use self::treebitmap::IpLookupTable;
 use analyze::helper::{
-    asn_geoloc, generate_citytable, generate_geotable, ip_normalize, load_area, load_asn,
+    generate_citytable, generate_geotable, ip_normalize, load_area, load_asn,
     load_data, load_weights, CityLoc, GeoLoc,
 };
 use std::cmp::Ordering;
