@@ -67,60 +67,75 @@ fn generate_iplink(tracepath: &String) -> HashMap<Ipv4Addr, HashMap<u32, Vec<(Ip
         }
     }
 
-    let mut msavg = HashMap::new();
-    for (ip, data) in ms.iter() {
-        let mut data = data
-            .iter()
-            .filter(|x| **x < 1000)
-            .map(|x| *x)
-            .collect::<Vec<u32>>();
-        if data.len() > 2 {
-            //let avg: f64 = (data.iter().sum::<u32>() as f64) / data.len() as f64;
-            data.sort();
-            let avg: f64 = {
-                if data.len() % 2 == 1 {
-                    data[data.len() / 2] as f64
-                } else {
-                    (data[data.len() / 2 - 1] + data[data.len() / 2]) as f64 / 2.
-                }
-            };
-            let sum2 = data
-                .iter()
-                .fold(0f64, |sum, curr| sum + (*curr as f64 - avg).powf(2.) as f64);
-            let sd = (sum2 / (data.len() as f64 - 1.)).sqrt();
-            msavg.insert(ip, (avg, sd));
-        }
-    }
-
-    // Separate data in bucket, from 0-10,10-20...500
-    let mut buckets = Vec::new();
-    let step = 10;
-    for i in (0..500).step_by(step) {
-        let current = i as f64;
-        let mut count = 0;
-        for (_, (avg, _)) in msavg.iter() {
-            if current < *avg && *avg < current + step as f64 {
-                count += 1
-            }
-        }
-        buckets.push(count);
-    }
-
-    info!("Median buckets: {:?}", buckets);
-
-    info!(
-        "Biggest ms: {:?}",
-        msavg.iter().fold(
-            ("0.0.0.0".parse().unwrap(), (0f64, 0f64)),
-            |(ip1, (avg1, sd1)), (ip2, (avg2, sd2))| match PartialOrd::partial_cmp(&avg1, &avg2) {
-                None => ("0.0.0.0".parse::<Ipv4Addr>().unwrap(), (0f64, 0f64)),
-                Some(Ordering::Greater) => (ip1, (avg1, sd1)),
-                Some(_) => (**ip2, (*avg2, *sd2)),
-            }
-        )
-    );
-
     return merge;
+}
+
+fn bucket_data(area: &HashMap<Ipv4Addr, Vec<u64>>) {
+    const BUCKETS_COUNT: usize = 50;
+    let mut buckets = vec![0; BUCKETS_COUNT];
+    for (_, data) in area.iter() {
+        let mut tmp = data.clone();
+        tmp.sort();
+        let mid = {
+            if tmp.len() % 2 == 1 {
+                tmp[tmp.len() / 2]
+            } else {
+                (tmp[tmp.len() / 2 - 1] + tmp[tmp.len() / 2]) / 2
+            }
+        } as usize;
+
+        buckets[(mid/10).min(BUCKETS_COUNT - 1) as usize] += 1;
+        
+        if data.len() < 3 {
+            continue;
+        }
+
+        let avg: f64 = tmp.iter().sum::<u64>() as f64 / tmp.len() as f64;
+        let sum = tmp
+            .iter()
+            .fold(0f64, |sum, curr| sum + (*curr as f64 - avg).powf(2.) as f64);
+        let _sd = (sum / (data.len() as f64 - 1.)).sqrt();
+    }
+    info!("Network Buckets: {:?}", buckets);
+}
+
+fn bucket_data_as(area: &HashMap<Ipv4Addr, Vec<u64>>, asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
+    const BUCKETS_COUNT: usize = 50;
+    let mut join = HashMap::new();
+
+    for (ip, data) in area.iter() {
+        if let Some((_, _, asn)) = asn.longest_match(*ip) {
+            for asn in asn {
+                join.entry(asn).or_insert(Vec::<u64>::new()).extend(data);
+            }
+        }
+    }
+
+    let mut buckets = vec![0; BUCKETS_COUNT];
+    for (_, data) in join.iter() {
+        let mut tmp = data.clone();
+        tmp.sort();
+        let mid = {
+            if tmp.len() % 2 == 1 {
+                tmp[tmp.len() / 2]
+            } else {
+                (tmp[tmp.len() / 2 - 1] + tmp[tmp.len() / 2]) / 2
+            }
+        } as usize;
+
+        buckets[(mid/10).min(BUCKETS_COUNT - 1) as usize] += 1;
+        
+        if data.len() < 3 {
+            continue;
+        }
+
+        let avg: f64 = tmp.iter().sum::<u64>() as f64 / tmp.len() as f64;
+        let sum = tmp
+            .iter()
+            .fold(0f64, |sum, curr| sum + (*curr as f64 - avg).powf(2.) as f64);
+        let _sd = (sum / (data.len() as f64 - 1.)).sqrt();
+    }
+    info!("AS Buckets: {:?}", buckets);
 }
 
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -411,6 +426,8 @@ pub fn graph_info() {
     let distance = analyze_paths(&graph, &asn, (Ipv4Addr::new(200,1,123,0), 0));
 
     let area = load_area(&tracepath);
+    bucket_data(&area);
+    bucket_data_as(&area, &asn);
     geolocalize(&area);
     geolocalize_weighted(&area);
     geolocalize_asnaware(&area, &asn);
