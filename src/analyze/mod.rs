@@ -4,6 +4,7 @@ mod join;
 mod latency;
 //mod paths;
 mod compare;
+mod verification;
 
 pub use self::helper::load_data;
 
@@ -12,6 +13,7 @@ use self::join::join_data;
 use self::latency::check_latency;
 //use self::paths::check_paths;
 use self::compare::compare_joins;
+use self::verification::verify;
 
 pub enum Steps {
     JoinData,
@@ -20,6 +22,7 @@ pub enum Steps {
     Paths,
     Latency,
     Compare,
+    Verify
 }
 
 pub fn run(step: &Steps) {
@@ -29,6 +32,7 @@ pub fn run(step: &Steps) {
         Steps::Testing => graph_info(),
         Steps::Latency => check_latency(),
         Steps::Compare => compare_joins(),
+        Steps::Verify => verify(),
         _ => {}
     }
 }
