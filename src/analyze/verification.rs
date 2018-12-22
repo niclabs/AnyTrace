@@ -26,17 +26,8 @@ pub fn verify() {
 
 #[derive(serde_derive::Deserialize, Debug)]
 struct DnsMeasurement {
-    //af: u8,
     //dst_addr: Ipv4Addr,
-    //dst_port: Option<String>,
     from: Ipv4Addr,
-    //fw: u16,
-    //group_id: u32,
-    //lts: u16,
-    //msm_id: u32,
-    //msm_name: String,
-    //prb_id: u32,
-    //proto: String,
     result: Option<DnsResult>,
 }
 
@@ -86,4 +77,23 @@ fn verify_data(area: &HashMap<Ipv4Addr, Vec<u64>>, dns: &HashMap<Ipv4Addr, Strin
         
     }
 
+}
+
+#[derive(serde_derive::Deserialize)]
+struct TraceMeasurement {
+    dst_addr: Ipv4Addr,
+    from: Ipv4Addr,
+    result: Vec<Trace>
+}
+
+#[derive(serde_derive::Deserialize)]
+struct Trace {
+    hop: u8,
+    result: Vec<TraceData>
+}
+
+#[derive(serde_derive::Deserialize)]
+struct TraceData {
+    from: Ipv4Addr,
+    rtt: f64,
 }
