@@ -1,15 +1,13 @@
-extern crate treebitmap;
 extern crate serde_derive;
 extern crate serde_json;
 
-use self::treebitmap::IpLookupTable;
-use analyze::helper::{load_area, load_asn, load_weights, ip_normalize};
+use analyze::helper::{ip_normalize, load_area};
 
+use std::collections::HashMap;
+use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::net::Ipv4Addr;
-use std::collections::{HashMap, HashSet};
-use std::env;
 
 pub fn verify() {
     let arguments = env::args().collect::<Vec<String>>();
@@ -33,18 +31,28 @@ struct DnsMeasurement {
 
 #[derive(serde_derive::Deserialize, Debug)]
 struct DnsResult {
-    answers: Vec<DnsAnswer>
+    answers: Vec<DnsAnswer>,
 }
 
 #[derive(serde_derive::Deserialize, Debug)]
+#[allow(non_snake_case)]
 struct DnsAnswer {
-    RDATA: Vec<String>
+    RDATA: Vec<String>,
 }
 
 fn load_capture(path: &String) -> HashMap<Ipv4Addr, String> {
     let f = File::open(path).unwrap();
     let mut mapping = HashMap::new();
-    let nodes = vec!["saopaulo", "amsterdam", "praga", "merced", "tucapel", "arica", "elsegundo", "monterrey"];
+    let nodes = vec![
+        "saopaulo",
+        "amsterdam",
+        "praga",
+        "merced",
+        "tucapel",
+        "arica",
+        "elsegundo",
+        "monterrey",
+    ];
 
     for line in BufReader::new(f).lines() {
         let data: Vec<DnsMeasurement> = serde_json::from_str(&line.unwrap()).unwrap();
@@ -67,18 +75,13 @@ fn load_capture(path: &String) -> HashMap<Ipv4Addr, String> {
 }
 
 fn verify_data(area: &HashMap<Ipv4Addr, Vec<u64>>, dns: &HashMap<Ipv4Addr, String>) {
-    let keys = dns.iter().map(|(_,y)| y.clone()).collect::<HashSet<String>>();
-    //let result = HashMap::new();
-    
     for (ip, loc) in dns.iter() {
         if area.contains_key(&ip) {
             info!("loc: {}; area: {:?}", loc, area.get(ip));
         }
-        
     }
-
 }
-
+/*
 #[derive(serde_derive::Deserialize)]
 struct TraceMeasurement {
     dst_addr: Ipv4Addr,
@@ -97,3 +100,4 @@ struct TraceData {
     from: Ipv4Addr,
     rtt: f64,
 }
+*/

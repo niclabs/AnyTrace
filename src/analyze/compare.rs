@@ -4,11 +4,11 @@ use self::treebitmap::IpLookupTable;
 use analyze::helper::{ip_normalize, load_asn};
 
 use std::collections::{HashMap, HashSet};
+use std::env;
+use std::fs;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::net::Ipv4Addr;
-use std::env;
-use std::fs;
 
 pub fn compare_joins() {
     let arguments = env::args().collect::<Vec<String>>();
@@ -18,7 +18,10 @@ pub fn compare_joins() {
     let trace1 = arguments[2].clone();
     let asnpath = arguments[3].clone();
     // Load all icmp, load all udp, look for collisions between tcp and udp.
-    compare(&trace1, &trace1.split(".").collect::<Vec<&str>>()[1].to_string());
+    compare(
+        &trace1,
+        &trace1.split(".").collect::<Vec<&str>>()[1].to_string(),
+    );
 
     let asn = load_asn(&asnpath);
     show_anycast_detected(&asn);

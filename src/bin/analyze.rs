@@ -11,10 +11,11 @@ fn main() {
         ("join", Steps::JoinData),
         ("testing", Steps::Testing),
         ("distance", Steps::DistanceMatrix),
-//        ("paths", Steps::Paths),
+        //        ("paths", Steps::Paths),
         ("latency", Steps::Latency),
         ("compare", Steps::Compare),
         ("verify", Steps::Verify),
+        ("estimator", Steps::Estimator),
     ];
     env_logger::init();
     let args: Vec<String> = env::args().collect();
