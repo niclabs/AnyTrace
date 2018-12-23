@@ -15,12 +15,12 @@ use std::net::Ipv4Addr;
 
 use self::bzip2::read::BzDecoder;
 use self::treebitmap::IpLookupTable;
-use analyze::helper::{ip_normalize, load_asn};
+use analyze::helper::{load_asn, load_weights_asn};
 
 pub fn estimator() {
     let arguments = env::args().collect::<Vec<String>>();
     if arguments.len() < 4 {
-        panic!("Argments: generate|run <asn.csv>\ngenerate: Generate the asn map with the configured traces\nrun: Run the estimator");
+        panic!("Argments: generate|run|runweight <asn.csv>\ngenerate: Generate the asn map with the configured traces\nrun: Run the estimator");
     }
     let asnpath = arguments[3].clone();
 
@@ -28,37 +28,43 @@ pub fn estimator() {
         let asn = load_asn(&asnpath);
         load_traceroute(&asn);
     } else if arguments[2] == "run" {
-        run_estimator();
+        run_estimator(&asnpath);
+    } else if arguments[2] == "runweight" {
+        let asn = load_asn(&asnpath);
+        run_estimator_weighted(&asn);
     } else {
         panic!("{} not an option", arguments[2]);
     }
 }
 
-fn run_estimator() {
-    let mut graph = load_graph();
+fn run_estimator_weighted(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
+    let mut graph = load_graph(&asn);
+    fill_reverse_graph(&mut graph);
+    filter_disconnected(2914, &mut graph);
+
+    let weights = load_weights_asn(&graph.iter().map(|(x,_)| *x).collect::<HashSet<u32>>(), asn);
+}
+
+fn run_estimator(asnpath: &String) {
+    let asn = load_asn(&asnpath);
+    let mut graph = load_graph(&asn);
     fill_reverse_graph(&mut graph);
     filter_disconnected(2914, &mut graph);
 
     let keys = graph.iter().map(|(x, _)| *x).collect::<Vec<u32>>();
     info!("ASN count: {}", keys.len());
 
-    let mut min = None;
-    let mut minasn = 0;
     let mut count = 0;
     let mut results = Vec::new();
     for asn in keys {
         let sum = dijkstra_sum_ms(asn, &graph);
         results.push((asn, sum));
-        if min.is_none() || sum < min.unwrap() {
-            min = Some(sum);
-            minasn = asn;
-        }
         count += 1;
         if count % 100 == 0 {
             info!("{}", count);
         }
     }
-    info!("Minimal asn: {}, {}", minasn, min.unwrap());
+
     results.sort_by(|(_, x), (_, y)| x.partial_cmp(y).unwrap_or(Ordering::Equal));
     info!("First minimals: {:?}", &results[0..(10.min(results.len()))]);
 }
@@ -73,11 +79,19 @@ fn dijkstra_sum_ms(start: u32, graph: &HashMap<u32, HashMap<(u32, u32), f32>>) -
     return r;
 }
 
+// Calculate the dijkstra distance graph
 fn dijkstra(start: u32, graph: &HashMap<u32, HashMap<(u32, u32), f32>>) -> HashMap<u32, f32> {
     let mut result: HashMap<u32, f32> = HashMap::new();
 
     let mut heap = BinaryHeap::new(); // Note: This is a max heap
     result.insert(start, 0f32);
+    result.insert(27678, 0f32); //merced
+    result.insert(22548, 0f32); //saopaulo
+    result.insert(25192, 0f32); //praga
+    result.insert(14259, 0f32); //tucapel
+    result.insert(715, 0f32); //amsterdam
+    result.insert(40528, 0f32); //elsegundo
+    result.insert(22894, 0f32); //monterrey
     heap.push(DijkstraState {
         asn: start,
         distance: 0f32,
@@ -105,7 +119,8 @@ fn dijkstra(start: u32, graph: &HashMap<u32, HashMap<(u32, u32), f32>>) -> HashM
     return result;
 }
 
-fn load_graph() -> HashMap<u32, HashMap<(u32, u32), f32>> {
+/// Load the internet graph based on 
+fn load_graph(_asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) -> HashMap<u32, HashMap<(u32, u32), f32>> {
     let mut result: HashMap<u32, HashMap<(u32, u32), Vec<f32>>> = HashMap::new();
 
     let paths = vec!["result/routes.1.csv", "result/routes.2.csv"];
@@ -123,6 +138,9 @@ fn load_graph() -> HashMap<u32, HashMap<(u32, u32), f32>> {
                 .extend(data[3..].iter().map(|x| x.parse::<f32>().unwrap()));
         }
     }
+
+    // Load data from anytrace
+    //load_anycast_graph(&mut result, asn);
 
     // Collect the vectors to a single value
     let mut reduced = HashMap::new();
@@ -186,6 +204,8 @@ struct Trace {
     rtt: Option<f32>,
 }
 
+/// Load a traceroute dump of ripe, outputting the ASN links in the format
+/// (start_asn,middle_asn,target_asn )
 fn load_traceroute(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
     let path = "./data/ripe/traceroute-2018-12-06T0100.bz2";
 
@@ -201,7 +221,7 @@ fn load_traceroute(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
         }
 
         let data: TracerouteMeasurement =
-            serde_json::from_str(&line).unwrap_or_else(|x| panic!("{}", line));
+            serde_json::from_str(&line).unwrap_or_else(|_| panic!("{}", line));
         //let data: TracerouteMeasurement = serde_json::from_str(&line).unwrap();
 
         // Store the route and add it to the result in the format: (src, middle, target): [rtt]
@@ -259,6 +279,63 @@ fn load_traceroute(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
         }
     }
 }
+
+/// Load a base distance matrix to calculate the distances.
+/*
+fn load_anycast_graph(out_graph: &mut HashMap<u32, HashMap<(u32, u32), Vec<f32>>>, asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
+    let paths = vec!["result/arica.icmp.join"];
+
+    let graph = load_data(&paths[0].to_string());
+    let mut table = HashMap::new();
+    for (_, measurement) in graph.iter() {
+        let data = &measurement.data;
+        let l = data.len();
+        let mut route = Vec::new();
+        let mut route_data = HashMap::new();
+        for item in data.iter() {
+            if let Some(packet) = item {
+                if let Some((_, _, asn)) = asn.longest_match(packet.dst) {
+                    for asn in asn {
+                        route_data.entry(*asn).or_insert(Vec::new()).push(packet.ms as f32);
+                        if !route.contains(asn) {
+                            route.push(*asn);
+                        }
+                    }
+                }
+            }
+        }
+        merge_differences(route, route_data, &mut table);
+    }
+    for (a, v) in table {
+        for ((b, c), latency) in v.iter() {
+            out_graph
+                .entry(a)
+                .or_insert(HashMap::new())
+                .entry((*b,*c))
+                .or_insert(Vec::new())
+                .extend(latency)
+        }
+    }
+}
+
+fn merge_differences(route: Vec<u32>, latency: HashMap<u32, Vec<f32>>, table: &mut HashMap<u32, HashMap<(u32, u32), Vec<f32>>>) {
+    for i in 0..(route.len().saturating_sub(2)) {
+        let r0 = latency.get(&route[i]).unwrap();
+        let r1 = latency.get(&route[i + 2]).unwrap();
+        let rtt0: f32 = r0.iter().sum::<f32>() / r0.len() as f32;
+        let rtt1: f32 = r1.iter().sum::<f32>() / r1.len() as f32;
+        let diff = rtt1 - rtt0;
+
+        if diff > 0f32 {
+            table
+                .entry(route[i])
+                .or_insert(HashMap::new())
+                .entry((route[i + 1], route[i + 2]))
+                .or_insert(Vec::new())
+                .push(diff);
+        }
+    }
+}*/
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 struct DijkstraState {

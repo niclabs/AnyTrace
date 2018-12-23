@@ -2,7 +2,6 @@ extern crate flate2;
 extern crate treebitmap;
 
 use self::flate2::read::GzDecoder;
-
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -276,20 +275,50 @@ pub fn generate_citytable() -> IpLookupTable<Ipv4Addr, CityLoc> {
     return tbl;
 }
 
-pub fn load_weights(filter: &HashMap<Ipv4Addr, Vec<u64>>) -> HashMap<Ipv4Addr, f64> {
-    use std::fs::File;
-    use std::io::BufReader;
-
-    let f = File::open("data/merced.gz").unwrap();
-    let zip = GzDecoder::new(f);
-
+pub fn load_weights_asn(filter: &HashSet<u32>, asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) -> HashMap<u32, f64> {
+    let weights = load_weights_lambda(|_| true, vec!["data/merced.gz", ]);
     let mut result = HashMap::new();
-    for line in BufReader::new(zip).lines() {
-        let data = line.unwrap();
-        let r = data.split("\t").collect::<Vec<&str>>();;
-        let ip: Ipv4Addr = ip_normalize(r[1].parse().unwrap());
-        if filter.contains_key(&ip) {
-            *result.entry(ip).or_insert(0) += 1;
+    let mut sum = 0f64;
+    for (ip, w) in weights {
+        if let Some((_, _, asn)) = asn.longest_match(ip) {
+            for asn in asn {
+                if filter.contains(&asn) {
+                    *result.entry(*asn).or_insert(0f64) += w;
+                    sum += w;
+                }
+            }
+        }
+    }
+
+    // Normalize
+    let normalized = result
+        .iter()
+        .map(|(x, y)| (*x, (*y as f64) / sum))
+        .collect::<HashMap<u32, f64>>();
+    {
+        let mut count = normalized.iter().collect::<Vec<(&u32, &f64)>>();
+        count.sort_by_key(|(_, y)| (*y * 100000f64) as u64);
+        count.reverse();
+        info!("ASN Most weight table: {:?}", &count[0..10.min(count.len())]);
+    }
+    return normalized;
+}
+
+fn load_weights_lambda<F>(filter: F, captures: Vec<&str>) -> HashMap<Ipv4Addr, f64>
+    where F: Fn(&Ipv4Addr) -> bool {
+
+    let mut result = HashMap::new();    
+    for path in captures {
+        let f = File::open(path).unwrap();
+        let zip = GzDecoder::new(f);
+
+        for line in BufReader::new(zip).lines() {
+            let data = line.unwrap();
+            let r = data.split("\t").collect::<Vec<&str>>();;
+            let ip: Ipv4Addr = ip_normalize(r[1].parse().unwrap());
+            if filter(&ip) {
+                *result.entry(ip).or_insert(0) += 1;
+            }
         }
     }
 
@@ -314,4 +343,10 @@ pub fn load_weights(filter: &HashMap<Ipv4Addr, Vec<u64>>) -> HashMap<Ipv4Addr, f
     }
 
     return normalized;
+
+}
+
+/// Load the weights from dump
+pub fn load_weights(filter: &HashMap<Ipv4Addr, Vec<u64>>) -> HashMap<Ipv4Addr, f64> {
+    return load_weights_lambda(|x| filter.contains_key(x), vec!["data/merced.gz"]);
 }
