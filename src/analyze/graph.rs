@@ -20,7 +20,7 @@ use std::u32;
 
 /// Load the traces and merge them in a HashMap by /24 network.
 /// The IP addresses in the trace are separated by the hop where they were found
-fn generate_iplink(tracepath: &String) -> HashMap<Ipv4Addr, HashMap<u32, Vec<(Ipv4Addr, u32)>>> {
+pub fn generate_iplink(tracepath: &String) -> HashMap<Ipv4Addr, HashMap<u32, Vec<(Ipv4Addr, u32)>>> {
     let data = load_data(tracepath);
     let mut merge: HashMap<Ipv4Addr, HashMap<u32, Vec<(Ipv4Addr, u32)>>> = HashMap::new();
     let mut ms: HashMap<Ipv4Addr, Vec<u32>> = HashMap::new(); // avg, count, sd
