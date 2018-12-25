@@ -90,10 +90,13 @@ fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
     let mut result = HashMap::new();
     for trace in traces.iter() {
         let mut map = generate_asmap(asn, trace);
+        let result_dist = dijkstra_hops(4200000000, &result);
+        let dist = dijkstra_hops(4200000000, &map);
+
         let keys = map.keys().map(|x|*x).collect::<Vec<u32>>();
         for k in keys.iter() {
             // Check if repeated, only if the hops are different. (TODO: Change tolerance to one)
-            if result.contains_key(k) && map.get(k).unwrap() != result.get(k).unwrap() {
+            if result.contains_key(k) && result_dist.get(k).unwrap_or(&10000) != result_dist.get(k).unwrap_or(&10000) {
                 // Collision detected, change to auxilirary (TODO: What about merging?)
                 let newkey = 4200000000 + k;
                 let data = map.get(k).unwrap().clone();
@@ -121,41 +124,54 @@ fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
     for i in 1..(max + 1) {
         debug!("ASN in level {}: {}", i, dist.iter().filter(|(_,v)| **v == i).count());
     }
-    /*
-    for trace in traces.iter() {
-        let map = generate_asmap(asn, trace);
-        for k in map.keys() {
-            *tmp.entry(*k).or_insert(0) += 1;
-        }
-        let dist = dijkstra_hops(0, &map);
-        //println!("{:?}", map);
-        //println!("{:?}", dist);
-        let max = *dist.iter().max_by_key(|(_, x)| *x).unwrap().1;
-        for i in 1..(max + 1) {
-            debug!("ASN in level {}: {}", i, dist.iter().filter(|(_,v)| **v == i).count());
-        }
 
-        for (k, v) in dist.iter() {
-            // On key collision, we will use an auxiliary ASN
-            // Use the private block 4200000000 + x
-            if distance.contains_key(k) && v != distance.get(k).unwrap() {
-                info!("Collision on ASN {}: {} vs {}", k, distance.get(k).unwrap(), v);
-            }
-            distance.insert(*k, *v);
-        }
+    // Try to optimize this network
+    // This will handle when we have nodes with unknown area of service
+    // and only offer new places on known networks
+    let mut dist = Vec::new();
+    let mut count = 0;
+    for asn in result.keys() {
+        let r = dijkstra_hops(*asn, &result);
+        let value = r.iter().map(|(_,y)| y).sum::<u32>();
+        dist.push((*asn, value));
 
+        count += 1;
+        if count % 100 == 0 {
+            info!("{}", count);
+        }
     }
-    debug!("repeated: {:?}", tmp.iter().filter(|(_,v)| **v > 1).count());
-    debug!("singular: {:?}", tmp.iter().filter(|(_,v)| **v == 1).count());*/
-    
-    // Todo: weight
+    dist.sort_by_key(|(_, y)| *y);
+    info!("Best results raw: {:?}", &dist[0..10.min(dist.len())]);
+
+    // Dijstra applying a limit on the hops
+    // Use the empty distance matrix, and then apply dijstra only on that node, updating uptil limit X.
+    // Force and not the updates to the level shown (to show the effect of badly applied rules)
+    // dijkstra_hops_limited
+
+    // Add weights to the ASN:
+    let weights = load_weights_asn(&dist.iter().map(|(x, _)| *x).collect::<HashSet<u32>>(), asn);
+    let mut dist = Vec::new();
+    let mut count = 0;
+    for asn in result.keys() {
+        let r = dijkstra_hops(*asn, &result);
+        let value = r.iter().map(|(x,y)| (*y as f64) * *weights.get(x).unwrap_or(&0f64)).sum::<f64>();
+        dist.push((*asn, value));
+
+        count += 1;
+        if count % 100 == 0 {
+            debug!("{}", count);
+        }
+    }
+    dist.sort_by_key(|(_, y)| (*y * 100_000f64) as u64);
+    info!("Best results weighted: {:?}", &dist[0..10.min(dist.len())]);
+
 }
 
 fn dijkstra_hops(start: u32, graph: &HashMap<u32, HashSet<u32>>) -> HashMap<u32, u32> {
     let mut result: HashMap<u32, u32> = HashMap::new();
 
     let mut heap = BinaryHeap::new(); // Note: This is a max heap
-    result.insert(start, 0);
+    result.insert(start, 1);
     result.insert(27678, 0); //merced
     result.insert(22548, 0); //saopaulo
     result.insert(25192, 0); //praga
@@ -166,6 +182,54 @@ fn dijkstra_hops(start: u32, graph: &HashMap<u32, HashSet<u32>>) -> HashMap<u32,
     result.insert(264806, 0); // arica
 
     heap.push(DijkstraStateHop { asn: start, distance: 0});
+    heap.push(DijkstraStateHop { asn: 27678, distance: 0}); //merced
+    heap.push(DijkstraStateHop { asn: 22548, distance: 0}); //saopaulo
+    heap.push(DijkstraStateHop { asn: 25192, distance: 0}); //praga
+    heap.push(DijkstraStateHop { asn: 14259, distance: 0}); //tucapel
+    heap.push(DijkstraStateHop { asn: 715, distance: 0}); //amsterdam
+    heap.push(DijkstraStateHop { asn: 40528, distance: 0}); //elsegundo
+    heap.push(DijkstraStateHop { asn: 22894, distance: 0}); //monterrey
+    heap.push(DijkstraStateHop { asn: 264806, distance: 0}); //arica
+
+
+    while let Some(DijkstraStateHop { asn, distance }) = heap.pop() {
+        if distance > *result.get(&asn).unwrap_or(&std::u32::MAX) {
+            continue;
+        }
+
+        for nodes in graph.get(&asn) {
+            for target in nodes.iter() {
+                let next = 1 + distance;
+                if next < *result.get(target).unwrap_or(&std::u32::MAX) {
+                    result.insert(*target, next);
+                    heap.push(DijkstraStateHop {
+                        asn: *target,
+                        distance: next,
+                    });
+                }
+            }
+        }
+    }
+
+    return result;
+}
+
+fn dijkstra_hops_limited(start: u32, max_hops: u32, graph: &HashMap<u32, HashSet<u32>>) -> HashMap<u32, u32> {
+    //TODO: Calculate the distan
+    let mut result: HashMap<u32, u32> = HashMap::new();
+
+    let mut heap = BinaryHeap::new(); // Note: This is a max heap
+    //result.insert(start, 0);
+    result.insert(27678, 0); //merced
+    result.insert(22548, 0); //saopaulo
+    result.insert(25192, 0); //praga
+    result.insert(14259, 0); //tucapel
+    result.insert(715, 0); //amsterdam
+    result.insert(40528, 0); //elsegundo
+    result.insert(22894, 0); //monterrey
+    result.insert(264806, 0); // arica
+
+    //heap.push(DijkstraStateHop { asn: start, distance: 0});
     heap.push(DijkstraStateHop { asn: 27678, distance: 0}); //merced
     heap.push(DijkstraStateHop { asn: 22548, distance: 0}); //saopaulo
     heap.push(DijkstraStateHop { asn: 25192, distance: 0}); //praga
