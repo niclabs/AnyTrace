@@ -275,22 +275,37 @@ pub fn generate_citytable() -> IpLookupTable<Ipv4Addr, CityLoc> {
     return tbl;
 }
 
-pub fn load_weights_asn(filter: &HashSet<u32>, asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) -> HashMap<u32, f64> {
-    let weights = load_weights_lambda(|_| true, vec!["data/merced.gz", ]);
+pub fn load_weights_asn(
+    filter: &HashSet<u32>,
+    asn: &IpLookupTable<Ipv4Addr, Vec<u32>>,
+) -> HashMap<u32, f64> {
+    let weights = load_weights_lambda(
+        |_| true,
+        vec![
+            "data/merced.gz",
+            "data/captures/amsterdam.gz",
+            "data/captures/elsegundo.gz",
+            "data/captures/monterreya.gz",
+            "data/captures/redwood.gz",
+            "data/captures/buenosaires.gz",
+            "data/captures/lima.gz",
+            "data/captures/praga.gz",
+            "data/captures/tokio.gz",
+        ],
+    );
     let mut result = HashMap::new();
-    let mut sum = 0f64;
     for (ip, w) in weights {
         if let Some((_, _, asn)) = asn.longest_match(ip) {
             for asn in asn {
                 if filter.contains(&asn) {
                     *result.entry(*asn).or_insert(0f64) += w;
-                    sum += w;
                 }
             }
         }
     }
 
-    // Normalize
+    return result;
+    /*    // Normalize
     let normalized = result
         .iter()
         .map(|(x, y)| (*x, (*y as f64) / sum))
@@ -301,13 +316,14 @@ pub fn load_weights_asn(filter: &HashSet<u32>, asn: &IpLookupTable<Ipv4Addr, Vec
         count.reverse();
         info!("ASN Most weight table: {:?}", &count[0..10.min(count.len())]);
     }
-    return normalized;
+    return normalized;*/
 }
 
 fn load_weights_lambda<F>(filter: F, captures: Vec<&str>) -> HashMap<Ipv4Addr, f64>
-    where F: Fn(&Ipv4Addr) -> bool {
-
-    let mut result = HashMap::new();    
+where
+    F: Fn(&Ipv4Addr) -> bool,
+{
+    let mut result = HashMap::new();
     for path in captures {
         let f = File::open(path).unwrap();
         let zip = GzDecoder::new(f);
@@ -317,11 +333,13 @@ fn load_weights_lambda<F>(filter: F, captures: Vec<&str>) -> HashMap<Ipv4Addr, f
             let r = data.split("\t").collect::<Vec<&str>>();;
             let ip: Ipv4Addr = ip_normalize(r[1].parse().unwrap());
             if filter(&ip) {
-                *result.entry(ip).or_insert(0) += 1;
+                *result.entry(ip).or_insert(0f64) += 1f64;
             }
         }
     }
 
+    return result;
+    /*
     // Normalize the result
     let sum: f64 = result.iter().map(|(_, x)| *x).sum::<u32>() as f64;
     let normalized = result
@@ -343,7 +361,7 @@ fn load_weights_lambda<F>(filter: F, captures: Vec<&str>) -> HashMap<Ipv4Addr, f
     }
 
     return normalized;
-
+*/
 }
 
 /// Load the weights from dump
