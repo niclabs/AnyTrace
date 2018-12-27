@@ -124,11 +124,17 @@ cat result/final/latency.tucapel | awk 'BEGIN {FS=":"} {if ($1 == "weightedlaten
 
 # Generate graphs
 for a in "arica" "merced" "saopaulo" "tucapel"; do
-    python result/final/plot.py ./result/final/latency/networklatency.$a.csv ./result/final/graph/latency/networklatency.$a.png 50 "/24 Network Count Vs Country Code" "Country Code" "/24 Network Count" 0
+    python result/final/plot.py ./result/final/latency/networklatency.$a.csv ./result/final/graph/latency/networklatency.$a.png 50 "/24 Network Count Vs Round Trip Time" "Round Trip Time" "/24 Network Count" 0
 done
 for a in "arica" "merced" "saopaulo" "tucapel"; do
-    python result/final/plot.py ./result/final/latency/aslatency.$a.csv ./result/final/graph/latency/aslatency.$a.png 50 "/24 Network Count Vs Country Code" "Country Code" "/24 Network Count" 0
+    python result/final/plot.py ./result/final/latency/aslatency.$a.csv ./result/final/graph/latency/aslatency.$a.png 50 "AS Count Vs Round Trip Time" "Round Trip Time" "AS Count" 0
 done
 for a in "arica" "merced" "saopaulo" "tucapel"; do
-    python result/final/plot.py ./result/final/latency/weightedlatency.$a.csv ./result/final/graph/latency/weightedlatency.$a.png 50 "/24 Network Count Vs Country Code" "Country Code" "/24 Network Count" 0
+    python result/final/plot.py ./result/final/latency/weightedlatency.$a.csv ./result/final/graph/latency/weightedlatency.$a.png 50 "Weighted Client Count Vs Round Trip Time" "Round Trip Time" "Weighted Client Count" 0
 done
+
+
+###################################
+########### Verification ##########
+###################################
+

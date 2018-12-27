@@ -56,12 +56,11 @@ fn bucket_data(area: &HashMap<Ipv4Addr, Vec<u64>>) {
     }
     info!("Network Buckets: {:?}", buckets);
     for i in 0..buckets.len() {
-        if i+1 == buckets.len() {
-            println!("networklatency:[{}:{}+,{}", i*10, i*10+10, buckets[i]);
+        if i + 1 == buckets.len() {
+            println!("networklatency:[{}:{}+,{}", i * 10, i * 10 + 10, buckets[i]);
         } else {
-            println!("networklatency:[{}:{}),{}", i*10, i*10+10, buckets[i]);
+            println!("networklatency:[{}:{}),{}", i * 10, i * 10 + 10, buckets[i]);
         }
-        
     }
 }
 
@@ -103,10 +102,10 @@ fn bucket_data_as(area: &HashMap<Ipv4Addr, Vec<u64>>, asn: &IpLookupTable<Ipv4Ad
     }
     info!("AS Buckets: {:?}", buckets);
     for i in 0..buckets.len() {
-        if i+1 == buckets.len() {
-            println!("aslatency:[{}:{}+,{}", i*10, i*10+10, buckets[i]);
+        if i + 1 == buckets.len() {
+            println!("aslatency:[{}:{}+,{}", i * 10, i * 10 + 10, buckets[i]);
         } else {
-            println!("aslatency:[{}:{}),{}", i*10, i*10+10, buckets[i]);
+            println!("aslatency:[{}:{}),{}", i * 10, i * 10 + 10, buckets[i]);
         }
     }
 }
@@ -148,10 +147,20 @@ fn bucket_data_weighted(area: &HashMap<Ipv4Addr, Vec<u64>>) {
 
     info!("Weighted Network Buckets: {:?}", buckets);
     for i in 0..buckets.len() {
-        if i+1 == buckets.len() {
-            println!("weightedlatency:[{}:{}+,{}", i*10, i*10+10, buckets[i]);
+        if i + 1 == buckets.len() {
+            println!(
+                "weightedlatency:[{}:{}+,{}",
+                i * 10,
+                i * 10 + 10,
+                buckets[i]
+            );
         } else {
-            println!("weightedlatency:[{}:{}),{}", i*10, i*10+10, buckets[i]);
+            println!(
+                "weightedlatency:[{}:{}),{}",
+                i * 10,
+                i * 10 + 10,
+                buckets[i]
+            );
         }
     }
 }

@@ -310,8 +310,8 @@ fn load_weights_lambda<F>(filter: F) -> HashMap<Ipv4Addr, f64>
 where
     F: Fn(&Ipv4Addr) -> bool,
 {
-    let captures = 
-        vec![/*
+    let captures = vec![
+        /*
             "data/merced.gz",
             "data/captures/amsterdam.gz",
             "data/captures/elsegundo.gz",
@@ -321,11 +321,11 @@ where
             "data/captures/lima.gz",
             "data/captures/praga.gz",
             "data/captures/tokio.gz",*/
-            "data/capture/saopaulo.gz",
-            "data/capture/merced.gz",
-            "data/capture/tucapel.gz",
-            "data/captures/redwood.gz",
-        ];
+        "data/capture/saopaulo.gz",
+        "data/capture/merced.gz",
+        "data/capture/tucapel.gz",
+        "data/captures/redwood.gz",
+    ];
     let mut result = HashMap::new();
     for path in captures {
         let f = File::open(path).unwrap();

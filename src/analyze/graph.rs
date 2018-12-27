@@ -370,7 +370,11 @@ fn geolocalize_weighted(area: &HashMap<Ipv4Addr, Vec<u64>>) {
 
     // normalize and print
     for (loc, count) in result.iter() {
-        println!("countryweight:{},{}", loc.country, count/result.iter().map(|(_,x)| *x).sum::<f64>());
+        println!(
+            "countryweight:{},{}",
+            loc.country,
+            count / result.iter().map(|(_, x)| *x).sum::<f64>()
+        );
     }
 }
 
@@ -440,7 +444,10 @@ fn geotest_weighted(area: &HashMap<Ipv4Addr, Vec<u64>>, city: &IpLookupTable<Ipv
     info!("Distance assigned: {:?}", result_count);
     info!(
         "Weighted distance assignations: {:?} (sum {})",
-        result.iter().map(|(x,y)| (*x,*y/result.iter().map(|(_, y)| *y).sum::<f64>())).collect::<Vec<(&str, f64)>>(),
+        result
+            .iter()
+            .map(|(x, y)| (*x, *y / result.iter().map(|(_, y)| *y).sum::<f64>()))
+            .collect::<Vec<(&str, f64)>>(),
         result.iter().map(|(_, y)| *y).sum::<f64>()
     );
 
