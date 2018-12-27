@@ -22,7 +22,9 @@ if limit > 0:
     x = x[:limit]
     y = y[:limit]
 
-plt.bar(x,y)
+plt.bar(range(len(x)), list(map(float,y)) )
+plt.xticks(range(len(x)), x)
+
 plt.xlabel(xname)
 plt.ylabel(yname)
 plt.title(title)

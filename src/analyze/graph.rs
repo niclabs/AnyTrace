@@ -219,7 +219,7 @@ fn paths_to_asn(
     count.reverse();
     info!("First 10 most indexed ASN: {:?}", &count[0..10]);
 
-    for (x, y) in result.iter() {
+    for (x, y) in count.iter() {
         println!("asncount:{},{}", x, y)
     }
 
@@ -245,7 +245,7 @@ fn check_aspath_hops(aspath: &HashMap<(Ipv4Addr, u32), Vec<u32>>) {
     count.sort_by_key(|(_, y)| *y);
     count.reverse();
     info!("Most as with multiple hop count: {:?}", &count[0..10]);
-    for (x, y) in result.iter() {
+    for (x, y) in count.iter() {
         println!("jumpcount:{},{}", x, y);
     }
 }
