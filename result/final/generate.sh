@@ -62,7 +62,14 @@ cat result/final/geo.tucapel |  awk 'BEGIN {FS=":"} {if ($1 == "assignedweighted
 
 ### Generate graphs
 # asncount
+for a in "arica" "merced" "saopaulo" "tucapel"; do
+    python result/final/plot.py ./result/final/geo/asncount.$a.csv ./result/final/graph/geo/asncount.$a.png 10 "/24 Network Count Vs ASN" "ASN" "/24 Network Count"
+done
 # jumpcount
+# Distance (TODO: Better graph)
+#for a in "arica" "merced" "saopaulo" "tucapel"; do
+#    python result/final/plot.py ./result/final/geo/jumpcount.$a.csv ./result/final/graph/geo/jumpcount.$a.png 10 "/24 Network Count Vs ASN" "ASN" "/24 Network Count"
+#done
 # country
 for a in "arica" "merced" "saopaulo" "tucapel"; do
     python result/final/plot.py ./result/final/geo/country.$a.csv ./result/final/graph/geo/country.$a.png 10 "/24 Network Count Vs Country Code" "Country Code" "/24 Network Count"
@@ -76,4 +83,10 @@ for a in "arica" "merced" "saopaulo" "tucapel"; do
     python result/final/plot.py ./result/final/geo/countryas.$a.csv ./result/final/graph/geo/countryas.$a.png 10 "AS Count Vs Country Code" "Country Code" "AS Count"
 done
 # assigned
+for a in "arica" "merced" "saopaulo" "tucapel"; do
+    python result/final/plot.py ./result/final/geo/assigned.$a.csv ./result/final/graph/geo/assigned.$a.png 10 "$a: AS Count Vs Country Code" "Country Code" "AS Count"
+done
 # assignedweighted
+for a in "arica" "merced" "saopaulo" "tucapel"; do
+    python result/final/plot.py ./result/final/geo/assignedweighted.$a.csv ./result/final/graph/geo/assignedweighted.$a.png 10 "$a: AS Count Vs Country Code" "Country Code" "AS Count"
+done

@@ -6,5 +6,6 @@ stdenv.mkDerivation {
 
   buildInputs = [
     rustup
+    (python36.withPackages(ps: [ps.matplotlib]))
   ];
 }

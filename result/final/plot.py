@@ -28,6 +28,5 @@ plt.xticks(range(len(x)), x)
 plt.xlabel(xname)
 plt.ylabel(yname)
 plt.title(title)
-#plt.legend()
 
 plt.savefig(outname)
