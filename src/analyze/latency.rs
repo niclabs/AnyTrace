@@ -55,6 +55,14 @@ fn bucket_data(area: &HashMap<Ipv4Addr, Vec<u64>>) {
         let _sd = (sum / (data.len() as f64 - 1.)).sqrt();
     }
     info!("Network Buckets: {:?}", buckets);
+    for i in 0..buckets.len() {
+        if i+1 == buckets.len() {
+            println!("networklatency:[{}:{}+,{}", i*10, i*10+10, buckets[i]);
+        } else {
+            println!("networklatency:[{}:{}),{}", i*10, i*10+10, buckets[i]);
+        }
+        
+    }
 }
 
 fn bucket_data_as(area: &HashMap<Ipv4Addr, Vec<u64>>, asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
@@ -94,6 +102,13 @@ fn bucket_data_as(area: &HashMap<Ipv4Addr, Vec<u64>>, asn: &IpLookupTable<Ipv4Ad
         let _sd = (sum / (data.len() as f64 - 1.)).sqrt();
     }
     info!("AS Buckets: {:?}", buckets);
+    for i in 0..buckets.len() {
+        if i+1 == buckets.len() {
+            println!("aslatency:[{}:{}+,{}", i*10, i*10+10, buckets[i]);
+        } else {
+            println!("aslatency:[{}:{}),{}", i*10, i*10+10, buckets[i]);
+        }
+    }
 }
 
 // Get the bucket weights by percentage
@@ -124,5 +139,19 @@ fn bucket_data_weighted(area: &HashMap<Ipv4Addr, Vec<u64>>) {
             .fold(0f64, |sum, curr| sum + (*curr as f64 - avg).powf(2.) as f64);
         let _sd = (sum / (data.len() as f64 - 1.)).sqrt();
     }
+
+    // normalize
+    let sum = buckets.iter().sum::<f64>();
+    for v in buckets.iter_mut() {
+        *v /= sum;
+    }
+
     info!("Weighted Network Buckets: {:?}", buckets);
+    for i in 0..buckets.len() {
+        if i+1 == buckets.len() {
+            println!("weightedlatency:[{}:{}+,{}", i*10, i*10+10, buckets[i]);
+        } else {
+            println!("weightedlatency:[{}:{}),{}", i*10, i*10+10, buckets[i]);
+        }
+    }
 }

@@ -1,7 +1,9 @@
 #/usr/bin/env bash
 set -e
 
-## geo
+###################################
+########### Geolocation ###########
+###################################
 #This uses only the area of service data.
 
 ### Generate data
@@ -89,4 +91,44 @@ done
 # assignedweighted
 for a in "arica" "merced" "saopaulo" "tucapel"; do
     python result/final/plot.py ./result/final/geo/assignedweighted.$a.csv ./result/final/graph/geo/assignedweighted.$a.png 10 "$a: AS Count Vs Country Code" "Country Code" "AS Count"
+done
+
+
+
+###################################
+########### Latency ###############
+###################################
+
+RUSTFLAGS='-C target-cpu=native' RUST_LOG=anytrace=debug RUST_BACKTRACE=1 CARGO_TARGET_DIR=~/tmp cargo run --release --bin analyze latency result/arica.icmp.join data/bgp.csv > result/final/latency.arica
+RUSTFLAGS='-C target-cpu=native' RUST_LOG=anytrace=debug RUST_BACKTRACE=1 CARGO_TARGET_DIR=~/tmp cargo run --release --bin analyze latency result/merced.icmp.join data/bgp.csv > result/final/latency.merced
+RUSTFLAGS='-C target-cpu=native' RUST_LOG=anytrace=debug RUST_BACKTRACE=1 CARGO_TARGET_DIR=~/tmp cargo run --release --bin analyze latency result/saopaulo.icmp.join data/bgp.csv > result/final/latency.saopaulo
+RUSTFLAGS='-C target-cpu=native' RUST_LOG=anytrace=debug RUST_BACKTRACE=1 CARGO_TARGET_DIR=~/tmp cargo run --release --bin analyze latency result/tucapel.icmp.join data/bgp.csv > result/final/latency.tucapel
+
+# networklatency
+cat result/final/latency.arica | awk 'BEGIN {FS=":"} {if ($1 == "networklatency") {if ($3 != "") {print $2"\\,"$3;} else {print $2}}}' > result/final/latency/networklatency.arica.csv
+cat result/final/latency.merced | awk 'BEGIN {FS=":"} {if ($1 == "networklatency") {if ($3 != "") {print $2"\\,"$3;} else {print $2}}}' > result/final/latency/networklatency.merced.csv
+cat result/final/latency.saopaulo | awk 'BEGIN {FS=":"} {if ($1 == "networklatency") {if ($3 != "") {print $2"\\,"$3;} else {print $2}}}' > result/final/latency/networklatency.saopaulo.csv
+cat result/final/latency.tucapel | awk 'BEGIN {FS=":"} {if ($1 == "networklatency") {if ($3 != "") {print $2"\\,"$3;} else {print $2}}}' > result/final/latency/networklatency.tucapel.csv
+
+# aslatency
+cat result/final/latency.arica | awk 'BEGIN {FS=":"} {if ($1 == "aslatency") {if ($3 != "") {print $2"\\,"$3;} else {print $2}}}' > result/final/latency/aslatency.arica.csv
+cat result/final/latency.merced | awk 'BEGIN {FS=":"} {if ($1 == "aslatency") {if ($3 != "") {print $2"\\,"$3;} else {print $2}}}' > result/final/latency/aslatency.merced.csv
+cat result/final/latency.saopaulo | awk 'BEGIN {FS=":"} {if ($1 == "aslatency") {if ($3 != "") {print $2"\\,"$3;} else {print $2}}}' > result/final/latency/aslatency.saopaulo.csv
+cat result/final/latency.tucapel | awk 'BEGIN {FS=":"} {if ($1 == "aslatency") {if ($3 != "") {print $2"\\,"$3;} else {print $2}}}' > result/final/latency/aslatency.tucapel.csv
+
+# weightedlatency
+cat result/final/latency.arica | awk 'BEGIN {FS=":"} {if ($1 == "weightedlatency") {if ($3 != "") {print $2"\\,"$3;} else {print $2}}}' > result/final/latency/weightedlatency.arica.csv
+cat result/final/latency.merced | awk 'BEGIN {FS=":"} {if ($1 == "weightedlatency") {if ($3 != "") {print $2"\\,"$3;} else {print $2}}}' > result/final/latency/weightedlatency.merced.csv
+cat result/final/latency.saopaulo | awk 'BEGIN {FS=":"} {if ($1 == "weightedlatency") {if ($3 != "") {print $2"\\,"$3;} else {print $2}}}' > result/final/latency/weightedlatency.saopaulo.csv
+cat result/final/latency.tucapel | awk 'BEGIN {FS=":"} {if ($1 == "weightedlatency") {if ($3 != "") {print $2"\\,"$3;} else {print $2}}}' > result/final/latency/weightedlatency.tucapel.csv
+
+# Generate graphs
+for a in "arica" "merced" "saopaulo" "tucapel"; do
+    python result/final/plot.py ./result/final/latency/networklatency.$a.csv ./result/final/graph/latency/networklatency.$a.png 50 "/24 Network Count Vs Country Code" "Country Code" "/24 Network Count" 0
+done
+for a in "arica" "merced" "saopaulo" "tucapel"; do
+    python result/final/plot.py ./result/final/latency/aslatency.$a.csv ./result/final/graph/latency/aslatency.$a.png 50 "/24 Network Count Vs Country Code" "Country Code" "/24 Network Count" 0
+done
+for a in "arica" "merced" "saopaulo" "tucapel"; do
+    python result/final/plot.py ./result/final/latency/weightedlatency.$a.csv ./result/final/graph/latency/weightedlatency.$a.png 50 "/24 Network Count Vs Country Code" "Country Code" "/24 Network Count" 0
 done
