@@ -218,6 +218,7 @@ fn paths_to_asn(
     count.sort_by_key(|(_, y)| *y);
     count.reverse();
     info!("First 10 most indexed ASN: {:?}", &count[0..10]);
+
     check_aspath_hops(&result);
 }
 
@@ -308,6 +309,7 @@ fn geolocalize_asnaware(
         .map(|(x, y)| (x, y.len() as u32))
         .collect::<Vec<(&GeoLoc, u32)>>();
     result.sort_by_key(|(_, y)| u32::MAX - *y);
+
     info!(
         "Max locations by ASN: {:?}",
         &result[0..10.min(result.len())]
@@ -320,6 +322,10 @@ fn geolocalize_asnaware(
             .map(|(x, y)| (x, *y))
             .collect::<Vec<(&&GeoLoc, u32)>>()
     );
+    // normalize and print
+    for (loc, count) in result.iter() {
+        println!("asnweight:{},{}", loc.country, (*count as f64)/result.iter().map(|(_,x)| *x).sum::<u32>() as f64);
+    }
 }
 
 fn geolocalize_weighted(area: &HashMap<Ipv4Addr, Vec<u64>>) {
@@ -349,6 +355,11 @@ fn geolocalize_weighted(area: &HashMap<Ipv4Addr, Vec<u64>>) {
             .map(|(x, y)| (x, *y))
             .collect::<Vec<(&GeoLoc, f64)>>()
     );
+
+    // normalize and print
+    for (loc, count) in result.iter() {
+        println!("countryweight:{},{}", loc.country, count/result.iter().map(|(_,x)| *x).sum::<f64>());
+    }
 }
 
 pub fn graph_info() {
@@ -357,15 +368,19 @@ pub fn graph_info() {
     // saopaulo: (200.160.0.0, 0)
     // tucapel: (190.153.177.0, 0)
     let arguments = env::args().collect::<Vec<String>>();
-    if arguments.len() < 4 {
-        panic!("Argments: <traces.csv> <asn.csv>");
+    if arguments.len() < 5 {
+        panic!("Argments: <traces.csv> <asn.csv> <ip>");
     }
     let tracepath = arguments[2].clone();
     let asnpath = arguments[3].clone();
+    let origin: Ipv4Addr = arguments[4].clone().parse().unwrap();
 
     let graph = generate_iplink(&tracepath);
     let asn = load_asn(&asnpath);
-    let _distance = analyze_paths(&graph, &asn, (Ipv4Addr::new(200, 1, 123, 0), 0));
+    //let _distance = analyze_paths(&graph, &asn, (Ipv4Addr::new(45, 71, 8, 0), 0));
+    //let _distance = analyze_paths(&graph, &asn, (Ipv4Addr::new(200, 1, 123, 0), 0));
+    let _distance = analyze_paths(&graph, &asn, (origin, 0));
+    //let _distance = analyze_paths(&graph, &asn, (Ipv4Addr::new(190, 153, 177, 0), 0));
 
     let area = load_area(&tracepath);
     geolocalize(&area);
@@ -413,9 +428,19 @@ fn geotest_weighted(area: &HashMap<Ipv4Addr, Vec<u64>>, city: &IpLookupTable<Ipv
     info!("Distance assigned: {:?}", result_count);
     info!(
         "Weighted distance assignations: {:?} (sum {})",
-        result,
+        result.iter().map(|(x,y)| (*x,*y/result.iter().map(|(_, y)| *y).sum::<f64>())).collect::<Vec<(&str, f64)>>(),
         result.iter().map(|(_, y)| *y).sum::<f64>()
-    ); // Sum is unlocated info
+    );
+
+    let sum = result_count.iter().map(|(_, y)| *y).sum::<u32>() as f64;
+    for (place, count) in result_count {
+        println!("assigned:{},{}", place, count as f64 / sum);
+    }
+
+    let sum = result.iter().map(|(_, y)| *y).sum::<f64>();
+    for (place, count) in result {
+        println!("assignedweighted:{},{}", place, count / sum);
+    }
 }
 
 // Define distance as (origin, middle, out) for every asn
