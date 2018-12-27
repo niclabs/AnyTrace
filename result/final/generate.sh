@@ -138,3 +138,8 @@ done
 ########### Verification ##########
 ###################################
 
+###################################
+############ Topologic ############
+###################################
+
+RUSTFLAGS='-C target-cpu=native' RUST_LOG=anytrace=debug RUST_BACKTRACE=1 CARGO_TARGET_DIR=~/tmp cargo run --release --bin analyze estimator run data/bgp.csv

@@ -359,29 +359,59 @@ fn run_estimator_weighted(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
 
     let mut results = Vec::new();
     for asn in keys {
+        let mut total = 0f64;
         let res = dijkstra(asn, &graph);
         let sum = res
             .iter()
-            .map(|(x, y)| *weights.get(x).unwrap_or(&0f64) * (*y as f64))
+            .map(|(x, y)| {
+                let weight = *weights.get(x).unwrap_or(&0f64);
+                total += weight;
+                weight * (*y as f64)
+            })
             .sum::<f64>();
-        results.push((asn, sum));
+        results.push((asn, sum / total));
         if results.len() % 100 == 0 {
             info!("{}", results.len());
         }
     }
     results.sort_by(|(_, x), (_, y)| x.partial_cmp(y).unwrap_or(Ordering::Equal));
+
+    let mut baset = 0f64;
+    let base = dijkstra(64512, &graph)
+        .iter()
+        .map(|(x, y)| {
+            let weight = *weights.get(x).unwrap_or(&0f64);
+            baset += weight;
+            weight * (*y as f64)
+        })
+        .sum::<f64>() / baset;
     info!(
         "First minimals weighted (base {}): {:?}",
-        dijkstra(64512, &graph)
-            .iter()
-            .map(|(x, y)| *weights.get(x).unwrap_or(&0f64) * (*y as f64))
-            .sum::<f64>()
-            / dijkstra(64512, &graph)
-                .iter()
-                .map(|(x, _)| *weights.get(x).unwrap_or(&0f64))
-                .sum::<f64>(),
+        base,
         &results[0..(10.min(results.len()))]
     );
+    
+    // Calculate local effects:
+    let base = dijkstra(64513, &graph);
+    for res in &results[0..(10.min(results.len()))] {
+        calculate_effect(&base, &dijkstra(res.0, &graph));
+    }
+}
+
+fn calculate_effect(base: &HashMap<u32, f32>, result: &HashMap<u32, f32>) {
+    let mut before = 0f32;
+    let mut after = 0f32;
+    let mut count = 0;
+    for (asn, ms) in result.iter() {
+        if let Some(r) = base.get(asn) {
+            if !almost_equal(*ms, *r) {
+                count += 1;
+                after += ms;
+                before += r;
+            }
+        }
+    }
+    info!("{} from {} (count: {}, {} from {})", after/count as f32, before/count as f32, count, after, before);
 }
 
 fn run_estimator(asnpath: &String) {
@@ -390,22 +420,74 @@ fn run_estimator(asnpath: &String) {
     fill_reverse_graph(&mut graph);
     filter_disconnected(2914, &mut graph);
 
-    let keys = graph.iter().map(|(x, _)| *x).collect::<Vec<u32>>();
+    let mut keys = graph.iter().map(|(x, _)| *x).collect::<Vec<u32>>();
+    keys.sort();
     info!("ASN count: {}", keys.len());
 
-    let mut results = Vec::new();
-    for asn in keys {
-        let sum = dijkstra_sum_ms(asn, &graph);
-        results.push((asn, sum));
-        if results.len() % 100 == 0 {
-            info!("{}", results.len());
+    {
+        let mut results = Vec::new();
+        for asn in &keys {
+            let sum = dijkstra_sum_ms(*asn, &graph);
+            results.push((*asn, sum/graph.len() as f32));
+            if results.len() % 100 == 0 {
+                info!("{}", results.len());
+                //if results.len() > 300 {break;}
+            }
+        }
+
+        results.sort_by(|(_, x), (_, y)| x.partial_cmp(y).unwrap_or(Ordering::Equal));
+        info!("First minimals (base: {}): {:?}", dijkstra_sum_ms(64513, &graph)/graph.len() as f32, &results[0..(10.min(results.len()))]);
+
+        // Calculate local effects:
+        let base = dijkstra(64513, &graph);
+        for res in &results[0..(10.min(results.len()))] {
+            let best = dijkstra(res.0, &graph);
+            let mut ra = 0f32;
+            let mut rb = 0f32;
+            let mut count = 0;
+            for (asn, ms) in &base {
+                if let Some(r) = best.get(&asn) {
+                    if !almost_equal(*r, *ms) {
+                        count += 1;
+                        ra += ms;
+                        rb += r;
+                    }
+                }
+            }
+            info!("{} vs {} (count: {}, {} vs {} = {})", ra/count as f32, rb/count as f32, count, ra, rb, ra - rb);
+        }
+
+        // Place with the most effect
+        let base = dijkstra(64513, &graph);
+        for res in &results[0..(10.min(results.len()))] {
+            calculate_effect(&base, &dijkstra(res.0, &graph));
         }
     }
 
-    results.sort_by(|(_, x), (_, y)| x.partial_cmp(y).unwrap_or(Ordering::Equal));
-    info!("First minimals: {:?}", &results[0..(10.min(results.len()))]);
+    // Place with the most effect
+    {
+        let mut results = Vec::new();
+        let base = dijkstra(64513, &graph);
+        for asn in &keys {
+            let res = dijkstra(*asn, &graph);
+            let mut count = 0;
+            for (asn, ms) in &base {
+                if let Some(r) = res.get(&asn) {
+                    if !almost_equal(*r, *ms) {
+                        count += 1;
+                    }
+                }
+            }
 
-    run_estimator_weighted(&asn);
+            results.push((asn, count));
+            if results.len() % 100 == 0 {
+                info!("{}", results.len());
+                if results.len() > 300 {break;}
+            }
+        }
+        results.sort_by(|(_, x), (_, y)| y.partial_cmp(x).unwrap_or(Ordering::Equal));
+        info!("First maximals (base: {}): {:?}", dijkstra_sum_ms(64513, &graph)/graph.len() as f32, &results[0..(10.min(results.len()))]);
+    }
 }
 
 fn dijkstra_sum_ms(start: u32, graph: &HashMap<u32, HashMap<u32, f32>>) -> f32 {
@@ -758,4 +840,9 @@ impl Ord for DijkstraStateHop {
             .cmp(&self.distance)
             .then_with(|| self.asn.cmp(&other.asn))
     }
+}
+
+fn almost_equal(a: f32, b: f32) -> bool {
+    const THRESHOLD: f32 = 0.00001;
+    return (a - b).abs() < THRESHOLD;
 }
