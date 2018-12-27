@@ -2,39 +2,62 @@
 ## geo
 This uses only the area of service data.
 
+### Generate data
+```
+RUSTFLAGS='-C target-cpu=native' RUST_LOG=anytrace=debug RUST_BACKTRACE=1 CARGO_TARGET_DIR=~/tmp cargo run --release --bin analyze testing result/arica.icmp.join data/bgp.csv 45.71.8.0 > result/final/geo.arica
+RUSTFLAGS='-C target-cpu=native' RUST_LOG=anytrace=debug RUST_BACKTRACE=1 CARGO_TARGET_DIR=~/tmp cargo run --release --bin analyze testing result/merced.icmp.join data/bgp.csv 200.1.123.0 > result/final/geo.merced
+RUSTFLAGS='-C target-cpu=native' RUST_LOG=anytrace=debug RUST_BACKTRACE=1 CARGO_TARGET_DIR=~/tmp cargo run --release --bin analyze testing result/saopaulo.icmp.join data/bgp.csv 200.160.0.0 > result/final/geo.saopaulo
+RUSTFLAGS='-C target-cpu=native' RUST_LOG=anytrace=debug RUST_BACKTRACE=1 CARGO_TARGET_DIR=~/tmp cargo run --release --bin analyze testing result/tucapel.icmp.join data/bgp.csv 190.153.177.0 > result/final/geo.tucapel
+```
+
 ### asncount
-Sistemas autonomos con los cuales conversa y la cantidad de redes /24 con los cuales habla.
+Sistemas autonomos con los cuales conversa Vs la cantidad de redes /24 con los cuales habla.
+```
+cat result/final/geo.arica |  awk 'BEGIN {FS=":"} {if ($1 == "asncount") {print $2;}}' > result/final/geo/asncount.arica.csv
+cat result/final/geo.merced |  awk 'BEGIN {FS=":"} {if ($1 == "asncount") {print $2;}}' > result/final/geo/asncount.merced.csv
+cat result/final/geo.saopaulo |  awk 'BEGIN {FS=":"} {if ($1 == "asncount") {print $2;}}' > result/final/geo/asncount.saopaulo.csv
+cat result/final/geo.tucapel |  awk 'BEGIN {FS=":"} {if ($1 == "asncount") {print $2;}}' > result/final/geo/asncount.tucapel.csv
+```
 
 ### jumpcount
-Cantidad de saltos maxima (hops) desde la entrada hasta la salida de un AS
+Cantidad de saltos maxima (hops) desde la entrada hasta la salida de un AS.
+```
+cat result/final/geo.arica |  awk 'BEGIN {FS=":"} {if ($1 == "jumpcount") {print $2;}}' > result/final/geo/jumpcount.arica.csv
+cat result/final/geo.merced |  awk 'BEGIN {FS=":"} {if ($1 == "jumpcount") {print $2;}}' > result/final/geo/jumpcount.merced.csv
+cat result/final/geo.saopaulo |  awk 'BEGIN {FS=":"} {if ($1 == "jumpcount") {print $2;}}' > result/final/geo/jumpcount.saopaulo.csv
+cat result/final/geo.tucapel |  awk 'BEGIN {FS=":"} {if ($1 == "jumpcount") {print $2;}}' > result/final/geo/jumpcount.tucapel.csv
+```
 
 ### country
 Cantidad de prefijos por pais (Filtrando por presición < 1000km (¿cual es el maximo?))
+```
+cat result/final/geo.arica |  awk 'BEGIN {FS=":"} {if ($1 == "country") {print $2;}}' > result/final/geo/country.arica.csv
+cat result/final/geo.merced |  awk 'BEGIN {FS=":"} {if ($1 == "country") {print $2;}}' > result/final/geo/country.merced.csv
+cat result/final/geo.saopaulo |  awk 'BEGIN {FS=":"} {if ($1 == "country") {print $2;}}' > result/final/geo/country.saopaulo.csv
+cat result/final/geo.tucapel |  awk 'BEGIN {FS=":"} {if ($1 == "country") {print $2;}}' > result/final/geo/country.tucapel.csv
+```
 
 ### countryas
-Cantidad de sistemas autonomos por pais con el que se comunica el nodo
+Cantidad de sistemas autonomos por pais con el que se comunica el nodo.
+```
+cat result/final/geo.arica |  awk 'BEGIN {FS=":"} {if ($1 == "countryas") {print $2;}}' > result/final/geo/countryas.arica.csv
+cat result/final/geo.merced |  awk 'BEGIN {FS=":"} {if ($1 == "countryas") {print $2;}}' > result/final/geo/countryas.merced.csv
+cat result/final/geo.saopaulo |  awk 'BEGIN {FS=":"} {if ($1 == "countryas") {print $2;}}' > result/final/geo/countryas.saopaulo.csv
+cat result/final/geo.tucapel |  awk 'BEGIN {FS=":"} {if ($1 == "countryas") {print $2;}}' > result/final/geo/countryas.tucapel.csv
+```
 
 ### countryweight
-The location normalized by the number of queries received
+The location with the weight applied. (number of queries)
 
 ```
-RUSTFLAGS='-C target-cpu=native' RUST_LOG=anytrace=debug RUST_BACKTRACE=1 CARGO_TARGET_DIR=~/tmp cargo run --release --bin analyze testing result/arica.icmp.join data/bgp.csv 45.71.8.0 | awk 'BEGIN {FS=":"} {if ($1 == "countryweight") {print $2;}}' > result/final/geo/countryweight.arica.csv
-RUSTFLAGS='-C target-cpu=native' RUST_LOG=anytrace=debug RUST_BACKTRACE=1 CARGO_TARGET_DIR=~/tmp cargo run --release --bin analyze testing result/merced.icmp.join data/bgp.csv 200.1.123.0 | awk 'BEGIN {FS=":"} {if ($1 == "countryweight") {print $2;}}' > result/final/geo/countryweight.merced.csv
-RUSTFLAGS='-C target-cpu=native' RUST_LOG=anytrace=debug RUST_BACKTRACE=1 CARGO_TARGET_DIR=~/tmp cargo run --release --bin analyze testing result/saopaulo.icmp.join data/bgp.csv 200.160.0.0 | awk 'BEGIN {FS=":"} {if ($1 == "countryweight") {print $2;}}' > result/final/geo/countryweight.saopaulo.csv
-RUSTFLAGS='-C target-cpu=native' RUST_LOG=anytrace=debug RUST_BACKTRACE=1 CARGO_TARGET_DIR=~/tmp cargo run --release --bin analyze testing result/tucapel.icmp.join data/bgp.csv 190.153.177.0 | awk 'BEGIN {FS=":"} {if ($1 == "countryweight") {print $2;}}' > result/final/geo/countryweight.tucapel.csv
-```
-
-### asnweight
-The locations normalized by the number of autonomous systems
-```
-cat result/final/geo.arica |  awk 'BEGIN {FS=":"} {if ($1 == "asnweight") {print $2;}}' > result/final/geo/asnweight.arica.csv
-cat result/final/geo.merced |  awk 'BEGIN {FS=":"} {if ($1 == "asnweight") {print $2;}}' > result/final/geo/asnweight.merced.csv
-cat result/final/geo.saopaulo |  awk 'BEGIN {FS=":"} {if ($1 == "asnweight") {print $2;}}' > result/final/geo/asnweight.saopaulo.csv
-cat result/final/geo.tucapel |  awk 'BEGIN {FS=":"} {if ($1 == "asnweight") {print $2;}}' > result/final/geo/asnweight.tucapel.csv
+cat result/final/geo.arica |  awk 'BEGIN {FS=":"} {if ($1 == "countryweight") {print $2;}}' > result/final/geo/countryweight.arica.csv
+cat result/final/geo.merced |  awk 'BEGIN {FS=":"} {if ($1 == "countryweight") {print $2;}}' > result/final/geo/countryweight.merced.csv
+cat result/final/geo.saopaulo |  awk 'BEGIN {FS=":"} {if ($1 == "countryweight") {print $2;}}' > result/final/geo/countryweight.saopaulo.csv
+cat result/final/geo.tucapel |  awk 'BEGIN {FS=":"} {if ($1 == "countryweight") {print $2;}}' > result/final/geo/countryweight.tucapel.csv
 ```
 
 ### assigned
-Number of assigned AS for every location in the area of the anycast node
+Number of assigned (by geodistance) AS for every location in the area of the anycast node
 ```
 cat result/final/geo.arica |  awk 'BEGIN {FS=":"} {if ($1 == "assigned") {print $2;}}' > result/final/geo/assigned.arica.csv
 cat result/final/geo.merced |  awk 'BEGIN {FS=":"} {if ($1 == "assigned") {print $2;}}' > result/final/geo/assigned.merced.csv
@@ -51,10 +74,16 @@ cat result/final/geo.saopaulo |  awk 'BEGIN {FS=":"} {if ($1 == "assignedweighte
 cat result/final/geo.tucapel |  awk 'BEGIN {FS=":"} {if ($1 == "assignedweighted") {print $2;}}' > result/final/geo/assignedweighted.tucapel.csv
 ```
 
-### Generate data
+### Generate graphs
 ```
-RUSTFLAGS='-C target-cpu=native' RUST_LOG=anytrace=debug RUST_BACKTRACE=1 CARGO_TARGET_DIR=~/tmp cargo run --release --bin analyze testing result/arica.icmp.join data/bgp.csv 45.71.8.0 > result/final/geo.arica
-RUSTFLAGS='-C target-cpu=native' RUST_LOG=anytrace=debug RUST_BACKTRACE=1 CARGO_TARGET_DIR=~/tmp cargo run --release --bin analyze testing result/merced.icmp.join data/bgp.csv 200.1.123.0 > result/final/geo.merced
-RUSTFLAGS='-C target-cpu=native' RUST_LOG=anytrace=debug RUST_BACKTRACE=1 CARGO_TARGET_DIR=~/tmp cargo run --release --bin analyze testing result/saopaulo.icmp.join data/bgp.csv 200.160.0.0 > result/final/geo.saopaulo
-RUSTFLAGS='-C target-cpu=native' RUST_LOG=anytrace=debug RUST_BACKTRACE=1 CARGO_TARGET_DIR=~/tmp cargo run --release --bin analyze testing result/tucapel.icmp.join data/bgp.csv 190.153.177.0 > result/final/geo.tucapel
+for a in "arica" "merced" "saopaulo" "tucapel"; do
+    python result/final/plot.py ./result/final/geo/country.$a.csv ./result/final/graph/geo/countryas.$a.png 10 "/24 Network Count Vs Country Code" "Country Code" "/24 Network Count"
+done
+for a in "arica" "merced" "saopaulo" "tucapel"; do
+    python result/final/plot.py ./result/final/geo/countryweight.$a.csv ./result/final/graph/geo/countryweight.$a.png 10 "/24 Network Count Vs Country Code" "Country Code" "/24 Network Count"
+done
+for a in "arica" "merced" "saopaulo" "tucapel"; do
+    python result/final/plot.py ./result/final/geo/countryas.$a.csv ./result/final/graph/geo/countryas.$a.png 10 "/24 Network Count Vs Country Code" "Country Code" "/24 Network Count"
+done
+
 ```

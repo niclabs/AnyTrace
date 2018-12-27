@@ -219,6 +219,10 @@ fn paths_to_asn(
     count.reverse();
     info!("First 10 most indexed ASN: {:?}", &count[0..10]);
 
+    for (x, y) in result.iter() {
+        println!("asncount:{},{}", x, y)
+    }
+
     check_aspath_hops(&result);
 }
 
@@ -241,6 +245,9 @@ fn check_aspath_hops(aspath: &HashMap<(Ipv4Addr, u32), Vec<u32>>) {
     count.sort_by_key(|(_, y)| *y);
     count.reverse();
     info!("Most as with multiple hop count: {:?}", &count[0..10]);
+    for (x, y) in result.iter() {
+        println!("jumpcount:{},{}", x, y);
+    }
 }
 
 /// Geolocalize the destinations
@@ -272,6 +279,10 @@ fn geolocalize(area: &HashMap<Ipv4Addr, Vec<u64>>) {
             .map(|(x, y)| (x, *y))
             .collect::<Vec<(&GeoLoc, u32)>>()
     );
+
+    for (loc, count) in result.iter() {
+        println!("country:{},{}", loc.country, count);
+    }
     /*
     let mut x = 0;
     while let Some(data) = result.get(&x) {
@@ -322,9 +333,10 @@ fn geolocalize_asnaware(
             .map(|(x, y)| (x, *y))
             .collect::<Vec<(&&GeoLoc, u32)>>()
     );
-    // normalize and print
+
+    // Number of AS by country
     for (loc, count) in result.iter() {
-        println!("asnweight:{},{}", loc.country, (*count as f64)/result.iter().map(|(_,x)| *x).sum::<u32>() as f64);
+        println!("countryas:{},{}", loc.country, count);
     }
 }
 
