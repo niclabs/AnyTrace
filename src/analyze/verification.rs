@@ -123,7 +123,9 @@ fn check_latency_distance(_area: &HashMap<Ipv4Addr, Vec<u64>>, assigned: HashMap
             for m in data.iter() {
                 for item in m.result.iter() {
                     for result in item.result.iter() {
-                        if let Some(origin) = locations.get(&result.from.unwrap_or(Ipv4Addr::new(0, 0, 0, 0))) {
+                        if let Some(origin) =
+                            locations.get(&result.from.unwrap_or(Ipv4Addr::new(0, 0, 0, 0)))
+                        {
                             if let Some(rtt) = result.rtt {
                                 latency
                                     .entry(m.prb_id)
@@ -147,13 +149,17 @@ fn check_latency_distance(_area: &HashMap<Ipv4Addr, Vec<u64>>, assigned: HashMap
             let mut min = std::f64::MAX;
             let mut minloc = "";
             for (loc, lat) in data {
-                let rtt = lat[lat.len()/2];
+                let rtt = lat[lat.len() / 2];
                 if rtt < min {
                     min = rtt;
                     minloc = loc;
                 }
             }
-            *result.entry(assign.to_string()).or_insert(HashMap::new()).entry(minloc.to_string()).or_insert(0) += 1;
+            *result
+                .entry(assign.to_string())
+                .or_insert(HashMap::new())
+                .entry(minloc.to_string())
+                .or_insert(0) += 1;
         }
     }
     println!("{:?}", result);
@@ -162,12 +168,12 @@ fn check_latency_distance(_area: &HashMap<Ipv4Addr, Vec<u64>>, assigned: HashMap
 #[derive(serde_derive::Deserialize)]
 struct TraceMeasurement {
     prb_id: u32,
-    result: Vec<Trace>
+    result: Vec<Trace>,
 }
 
 #[derive(serde_derive::Deserialize)]
 struct Trace {
-    result: Vec<TraceData>
+    result: Vec<TraceData>,
 }
 
 #[derive(serde_derive::Deserialize)]
@@ -175,4 +181,3 @@ struct TraceData {
     from: Option<Ipv4Addr>,
     rtt: Option<f64>,
 }
-

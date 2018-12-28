@@ -292,18 +292,6 @@ pub fn load_weights_asn(
     }
 
     return result;
-    /*    // Normalize
-    let normalized = result
-        .iter()
-        .map(|(x, y)| (*x, (*y as f64) / sum))
-        .collect::<HashMap<u32, f64>>();
-    {
-        let mut count = normalized.iter().collect::<Vec<(&u32, &f64)>>();
-        count.sort_by_key(|(_, y)| (*y * 100000f64) as u64);
-        count.reverse();
-        info!("ASN Most weight table: {:?}", &count[0..10.min(count.len())]);
-    }
-    return normalized;*/
 }
 
 fn load_weights_lambda<F>(filter: F) -> HashMap<Ipv4Addr, f64>

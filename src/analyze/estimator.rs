@@ -145,11 +145,22 @@ fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
             dist.push((*asn, value));
 
             if dist.len() % 100 == 0 {
-                info!("{}", dist.len());
+                debug!("{}", dist.len());
             }
         }
         dist.sort_by_key(|(_, y)| *y);
         info!("Best results raw: {:?}", &dist[0..10.min(dist.len())]);
+
+        for i in 0..50.min(dist.len()) {
+            println!("hopraw:{},{}", dist[i].0, dist[i].1);
+            // Local effect
+            //let (before, after, count) =
+            //    calculate_effect_weighted(&base, &dijkstra(results[i].0, &graph), &weights);
+            //println!(
+            //    "rawminimalcompare:{},{},{},{}",
+            //    results[i].0, before, after, count
+            //);
+        }
     }
 
     // Dijstra applying a limit on the hops
@@ -168,6 +179,9 @@ fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
                 .map(|(x, y)| (*y as f64) * *weights.get(x).unwrap_or(&0f64))
                 .sum::<f64>();
             dist.push((*asn, value));
+            if dist.len() % 100 == 0 {
+                debug!("{}", dist.len());
+            }
         }
         dist.sort_by_key(|(_, y)| (*y * 100_000f64) as u64);
         let sum = dist.iter().map(|(_, x)| *x).sum::<f64>();
@@ -367,14 +381,25 @@ fn run_estimator_weighted(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
                 let weight = *weights.get(x).unwrap_or(&0f64);
                 total += weight;
                 weight * (*y as f64)
-            })
-            .sum::<f64>();
+            }).sum::<f64>();
         results.push((asn, sum / total));
         if results.len() % 100 == 0 {
-            info!("{}", results.len());
+            debug!("{}", results.len());
         }
     }
+
+    let base = dijkstra(64513, &graph);
     results.sort_by(|(_, x), (_, y)| x.partial_cmp(y).unwrap_or(Ordering::Equal));
+    for i in 0..50.min(results.len()) {
+        println!("weightedminimal:{},{}", results[i].0, results[i].1);
+        // Local effect
+        let (before, after, count) =
+            calculate_effect_weighted(&base, &dijkstra(results[i].0, &graph), &weights);
+        println!(
+            "rawminimalcompare:{},{},{},{}",
+            results[i].0, before, after, count
+        );
+    }
 
     let mut baset = 0f64;
     let base = dijkstra(64512, &graph)
@@ -383,23 +408,46 @@ fn run_estimator_weighted(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
             let weight = *weights.get(x).unwrap_or(&0f64);
             baset += weight;
             weight * (*y as f64)
-        })
-        .sum::<f64>() / baset;
+        }).sum::<f64>()
+        / baset;
     info!(
         "First minimals weighted (base {}): {:?}",
         base,
         &results[0..(10.min(results.len()))]
     );
-    
-    // Calculate local effects:
-    let base = dijkstra(64513, &graph);
-    for res in &results[0..(10.min(results.len()))] {
-        calculate_effect(&base, &dijkstra(res.0, &graph));
+    println!("weightedminimalbase:{}", base);
+}
+
+fn calculate_effect_weighted(
+    base: &HashMap<u32, f32>,
+    result: &HashMap<u32, f32>,
+    weights: &HashMap<u32, f64>,
+) -> (f32, f32, u32) {
+    let mut before = 0f64;
+    let mut after = 0f64;
+    let mut count = 0;
+    let mut sumweights = 0f64;
+    for (asn, ms) in result.iter() {
+        if let Some(r) = base.get(asn) {
+            if !almost_equal(*ms, *r) {
+                let w = *weights.get(asn).unwrap_or(&0f64);
+                count += 1;
+                after += *ms as f64 * w;
+                before += *r as f64 * w;
+                sumweights += w;
+            }
+        }
     }
+
+    return (
+        (before / sumweights) as f32,
+        (after / sumweights) as f32,
+        count,
+    );
 }
 
 /// Calculate the difference between the hashmaps, returning (valuebefore, valueafter, count)
-fn calculate_effect(base: &HashMap<u32, f32>, result: &HashMap<u32, f32>) -> (f32, f32, u32){
+fn calculate_effect(base: &HashMap<u32, f32>, result: &HashMap<u32, f32>) -> (f32, f32, u32) {
     let mut before = 0f32;
     let mut after = 0f32;
     let mut count = 0;
@@ -412,8 +460,15 @@ fn calculate_effect(base: &HashMap<u32, f32>, result: &HashMap<u32, f32>) -> (f3
             }
         }
     }
-    trace!("{} from {} (count: {}, {} from {})", after/count as f32, before/count as f32, count, after, before);
-    return (before, after, count);
+    trace!(
+        "{} from {} (count: {}, {} from {})",
+        after / count as f32,
+        before / count as f32,
+        count,
+        after,
+        before
+    );
+    return (before / count as f32, after / count as f32, count);
 }
 
 fn run_estimator(asnpath: &String) {
@@ -430,7 +485,7 @@ fn run_estimator(asnpath: &String) {
         let mut results = Vec::new();
         for asn in &keys {
             let sum = dijkstra_sum_ms(*asn, &graph);
-            results.push((*asn, sum/graph.len() as f32));
+            results.push((*asn, sum / graph.len() as f32));
             if results.len() % 100 == 0 {
                 debug!("{}", results.len());
             }
@@ -438,13 +493,23 @@ fn run_estimator(asnpath: &String) {
 
         results.sort_by(|(_, x), (_, y)| x.partial_cmp(y).unwrap_or(Ordering::Equal));
         let base = dijkstra(64513, &graph);
-        info!("First minimals (base: {}): {:?}", dijkstra_sum_ms(64513, &graph)/graph.len() as f32, &results[0..(10.min(results.len()))]);
-        println!("rawminimalbase:{}", dijkstra_sum_ms(64513, &graph)/graph.len() as f32);
+        info!(
+            "First minimals (base: {}): {:?}",
+            dijkstra_sum_ms(64513, &graph) / graph.len() as f32,
+            &results[0..(10.min(results.len()))]
+        );
+        println!(
+            "rawminimalbase:{}",
+            dijkstra_sum_ms(64513, &graph) / graph.len() as f32
+        );
         for i in 0..50.min(results.len()) {
             println!("rawminimal:{},{}", results[i].0, results[i].1);
             // Local effect
             let (before, after, count) = calculate_effect(&base, &dijkstra(results[i].0, &graph));
-            println!("rawminimalcompare:{},{},{},{}", results[i].0, before/count as f32, after/count as f32, count);
+            println!(
+                "rawminimalcompare:{},{},{},{}",
+                results[i].0, before, after, count
+            );
         }
     }
 
@@ -471,7 +536,10 @@ fn run_estimator(asnpath: &String) {
         results.sort_by(|(_, x), (_, y)| y.partial_cmp(x).unwrap_or(Ordering::Equal));
         for i in 0..50.min(results.len()) {
             let (before, after, count) = calculate_effect(&base, &dijkstra(*results[i].0, &graph));
-            println!("rawareamaximal:{},{},{},{}", results[i].0, before/count as f32, after/count as f32, count);
+            println!(
+                "rawareamaximal:{},{},{},{}",
+                results[i].0, before, after, count
+            );
         }
     }
 }
