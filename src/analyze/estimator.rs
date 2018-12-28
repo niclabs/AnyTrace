@@ -151,15 +151,15 @@ fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
         dist.sort_by_key(|(_, y)| *y);
         info!("Best results raw: {:?}", &dist[0..10.min(dist.len())]);
 
+        let base = dijkstra_hops(4200000000, &result).iter().map(|(x,y)| (*x,*y as f32)).collect::<HashMap<u32, f32>>();
         for i in 0..50.min(dist.len()) {
             println!("hopraw:{},{}", dist[i].0, dist[i].1);
             // Local effect
-            //let (before, after, count) =
-            //    calculate_effect_weighted(&base, &dijkstra(results[i].0, &graph), &weights);
-            //println!(
-            //    "rawminimalcompare:{},{},{},{}",
-            //    results[i].0, before, after, count
-            //);
+            let (before, after, count) = calculate_effect(&base, &dijkstra_hops(dist[i].0, &result).iter().map(|(x,y)| (*x,*y as f32)).collect::<HashMap<u32, f32>>());
+            println!(
+                "hoprawcompare:{},{},{},{}",
+                dist[i].0, before, after, count
+            );
         }
     }
 
@@ -174,45 +174,78 @@ fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
         let mut dist = Vec::new();
         for asn in result.keys() {
             let r = dijkstra_hops(*asn, &result);
+            let mut sumweight = 0f64;
             let value = r
                 .iter()
-                .map(|(x, y)| (*y as f64) * *weights.get(x).unwrap_or(&0f64))
+                .map(|(x, y)| {
+                    let w = *weights.get(x).unwrap_or(&0f64);
+                    sumweight += w;
+                    (*y as f64) * w}
+                )
                 .sum::<f64>();
-            dist.push((*asn, value));
+            dist.push((*asn, value / sumweight));
             if dist.len() % 100 == 0 {
                 debug!("{}", dist.len());
             }
         }
         dist.sort_by_key(|(_, y)| (*y * 100_000f64) as u64);
-        let sum = dist.iter().map(|(_, x)| *x).sum::<f64>();
         let dist = dist
             .iter()
-            .map(|(x, y)| (*x, *y / sum))
+            .map(|(x, y)| (*x, *y))
             .collect::<Vec<(u32, f64)>>();
+        
         info!("Best results weighted: {:?}", &dist[0..10.min(dist.len())]);
+
+        let base = dijkstra_hops(4200000000, &result).iter().map(|(x,y)| (*x,*y as f32)).collect::<HashMap<u32, f32>>();
+        for i in 0..50.min(dist.len()) {
+            println!("hopweight:{},{}", dist[i].0, dist[i].1);
+            // Local effect
+            let (before, after, count) = calculate_effect_weighted(&base, &dijkstra_hops(dist[i].0, &result).iter().map(|(x,y)| (*x,*y as f32)).collect::<HashMap<u32, f32>>(), &weights);
+            println!(
+                "hopweightcompare:{},{},{},{}",
+                dist[i].0, before, after, count
+            );
+        }
     }
 
     // Limited movement by steps
+    for max_hops in 1..5
     {
         let base = dijkstra_hops(4200000000, &result);
         let base_dist = base.iter().map(|(_, y)| y).sum::<u32>();
+        //let max_hops = 0;
         let mut dist = Vec::new();
-        let max_hops = 0;
         for asn in result.keys() {
             let r = dijkstra_hops_limited(*asn, max_hops, &result, &base);
             let value = r.iter().map(|(_, y)| y).sum::<u32>();
             dist.push((*asn, value));
         }
         dist.sort_by_key(|(_, y)| *y);
+        let dist = dist
+            .iter()
+            .map(|(x, y)| (*x, *y))
+            .collect::<Vec<(u32, u32)>>();
         info!(
             "Limited movement by {}, from {}, best results: {:?}",
             max_hops,
             base_dist,
             &dist[0..10.min(dist.len())]
         );
+
+        let tmpbase = base.iter().map(|(x,y)| (*x,*y as f32)).collect::<HashMap<u32, f32>>();
+        for i in 0..50.min(dist.len()) {
+            println!("limitedraw{}:{},{}", max_hops, dist[i].0, dist[i].1);
+            // Local effect
+            let (before, after, count) = calculate_effect(&tmpbase, &dijkstra_hops_limited(dist[i].0, max_hops, &result, &base).iter().map(|(x,y)| (*x,*y as f32)).collect::<HashMap<u32, f32>>());
+            println!(
+                "limitedrawcompare{}:{},{},{},{}",
+                max_hops, dist[i].0, before, after, count
+            );
+        }
     }
 
     // Limited movement by step weighted
+    for max_hops in 1..5
     {
         let base = dijkstra_hops(4200000000, &result);
         let base_dist = base
@@ -220,21 +253,25 @@ fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
             .map(|(x, y)| (*y as f64) * *weights.get(x).unwrap_or(&0f64))
             .sum::<f64>();
         let mut dist = Vec::new();
-        let max_hops = 0;
+        //let max_hops = 0;
         for asn in result.keys() {
+            let mut sumweight = 0f64;
             let r = dijkstra_hops_limited(*asn, max_hops, &result, &base);
             let value = r
                 .iter()
-                .map(|(x, y)| (*y as f64) * *weights.get(x).unwrap_or(&0f64))
+                .map(|(x, y)| {
+                    let w = *weights.get(x).unwrap_or(&0f64);
+                    sumweight += w;
+                    (*y as f64) * w
+                })
                 .sum::<f64>();
-            dist.push((*asn, value));
+            dist.push((*asn, value/sumweight));
         }
-        info!("{:?}", dist);
+
         dist.sort_by_key(|(_, y)| (*y * 100_000f64) as u64);
-        let sum = dist.iter().map(|(_, x)| *x).sum::<f64>();
         let dist = dist
             .iter()
-            .map(|(x, y)| (*x, *y / sum))
+            .map(|(x, y)| (*x, *y))
             .collect::<Vec<(u32, f64)>>();
         info!(
             "Limited movement by {} weighted, from {}, best results: {:?}",
@@ -242,6 +279,17 @@ fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
             base_dist,
             &dist[0..10.min(dist.len())]
         );
+
+        let tmpbase = base.iter().map(|(x,y)| (*x,*y as f32)).collect::<HashMap<u32, f32>>();
+        for i in 0..50.min(dist.len()) {
+            println!("hopweight{}:{},{}", max_hops, dist[i].0, dist[i].1);
+            // Local effect
+            let (before, after, count) = calculate_effect_weighted(&tmpbase, &dijkstra_hops(dist[i].0, &result).iter().map(|(x,y)| (*x,*y as f32)).collect::<HashMap<u32, f32>>(), &weights);
+            println!(
+                "hopweightcompare{}:{},{},{},{}",
+                max_hops, dist[i].0, before, after, count
+            );
+        }
     }
 }
 
@@ -327,12 +375,14 @@ fn dijkstra_hops_limited(
     let mut result: HashMap<u32, u32> = base.clone();
 
     let mut heap = BinaryHeap::new(); // Note: This is a max heap
-    result.insert(start, 0);
+    if result.get(&start).unwrap_or(&std::u32::MAX) > &1 {
+        result.insert(start, 1);
 
-    heap.push(DijkstraStateHop {
-        asn: start,
-        distance: 0,
-    });
+        heap.push(DijkstraStateHop {
+            asn: start,
+            distance: 1,
+        });
+    }
 
     while let Some(DijkstraStateHop { asn, distance }) = heap.pop() {
         // dont exceed the max distance
