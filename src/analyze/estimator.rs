@@ -15,7 +15,7 @@ use std::net::Ipv4Addr;
 
 use self::bzip2::read::BzDecoder;
 use self::treebitmap::IpLookupTable;
-use analyze::helper::{load_asn, load_data, load_weights_asn};
+use analyze::helper::{load_asn, load_data, load_weights_asn, get_locations_asn};
 
 pub fn estimator() {
     let arguments = env::args().collect::<Vec<String>>();
@@ -96,7 +96,7 @@ fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
         let result_dist = dijkstra_hops(4200000000, &result, asn);
 
         let keys = map.keys().map(|x| *x).collect::<Vec<u32>>();
-        for k in keys.iter() {
+        for k in keys.iter() {break;
             // Check if repeated, only if the hops are different.
             if result.contains_key(k)
                 && result_dist.get(k).unwrap_or(&10000) != result_dist.get(k).unwrap_or(&10000)
@@ -225,10 +225,10 @@ fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
         let base_dist = base.iter().map(|(_, y)| y).sum::<u32>();
         //let max_hops = 0;
         let mut dist = Vec::new();
-        for asn in result.keys() {
-            let r = dijkstra_hops_limited(*asn, max_hops, &result, &base);
+        for rasn in result.keys() {
+            let r = dijkstra_hops_limited(*rasn, max_hops, &result, &base, asn);
             let value = r.iter().map(|(_, y)| y).sum::<u32>();
-            dist.push((*asn, value));
+            dist.push((*rasn, value));
         }
         dist.sort_by_key(|(_, y)| *y);
         let dist = dist
@@ -246,7 +246,7 @@ fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
         for i in 0..50.min(dist.len()) {
             println!("limitedraw{}:{},{}", max_hops, dist[i].0, dist[i].1);
             // Local effect
-            let (before, after, count) = calculate_effect(&tmpbase, &dijkstra_hops_limited(dist[i].0, max_hops, &result, &base).iter().map(|(x,y)| (*x,*y as f32)).collect::<HashMap<u32, f32>>());
+            let (before, after, count) = calculate_effect(&tmpbase, &dijkstra_hops_limited(dist[i].0, max_hops, &result, &base, asn).iter().map(|(x,y)| (*x,*y as f32)).collect::<HashMap<u32, f32>>());
             println!(
                 "limitedrawcompare{}:{},{},{},{}",
                 max_hops, dist[i].0, before, after, count
@@ -264,9 +264,9 @@ fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
             .sum::<f64>();
         let mut dist = Vec::new();
         //let max_hops = 0;
-        for asn in result.keys() {
+        for rasn in result.keys() {
             let mut sumweight = 0f64;
-            let r = dijkstra_hops_limited(*asn, max_hops, &result, &base);
+            let r = dijkstra_hops_limited(*rasn, max_hops, &result, &base, asn);
             let value = r
                 .iter()
                 .map(|(x, y)| {
@@ -275,7 +275,7 @@ fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
                     (*y as f64) * w
                 })
                 .sum::<f64>();
-            dist.push((*asn, value/sumweight));
+            dist.push((*rasn, value/sumweight));
         }
 
         dist.sort_by_key(|(_, y)| (*y * 100_000f64) as u64);
@@ -294,7 +294,10 @@ fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
         for i in 0..50.min(dist.len()) {
             println!("hopweight{}:{},{}", max_hops, dist[i].0, dist[i].1);
             // Local effect
-            let (before, after, count) = calculate_effect_weighted(&tmpbase, &dijkstra_hops(dist[i].0, &result, asn).iter().map(|(x,y)| (*x,*y as f32)).collect::<HashMap<u32, f32>>(), &weights);
+            let (before, after, count) = calculate_effect_weighted(&tmpbase,
+                &dijkstra_hops_limited(dist[i].0, max_hops, &result, &base, asn).iter().map(|(x,y)| (*x,*y as f32)).collect::<HashMap<u32, f32>>(),
+                &weights
+            );
             println!(
                 "hopweightcompare{}:{},{},{},{}",
                 max_hops, dist[i].0, before, after, count
@@ -305,16 +308,14 @@ fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
 
 pub fn dijkstra_hops(start: u32, graph: &HashMap<u32, HashSet<u32>>, asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) -> HashMap<u32, u32> {
     let mut result: HashMap<u32, u32> = HashMap::new();
-
     let mut heap = BinaryHeap::new(); // Note: This is a max heap
-    result.insert(start, 1);
 
+    result.insert(start, 1);
     heap.push(DijkstraStateHop {
         asn: start,
         distance: 1,
     });
 
-    use analyze::helper::get_locations_asn;
     for (_, v) in get_locations_asn(&asn) {
         for asn in v {
             heap.push(DijkstraStateHop {
@@ -352,17 +353,27 @@ fn dijkstra_hops_limited(
     max_hops: u32,
     graph: &HashMap<u32, HashSet<u32>>,
     base: &HashMap<u32, u32>,
+    asn: &IpLookupTable<Ipv4Addr, Vec<u32>>,
 ) -> HashMap<u32, u32> {
     let mut result: HashMap<u32, u32> = base.clone();
-
     let mut heap = BinaryHeap::new(); // Note: This is a max heap
+
     if result.get(&start).unwrap_or(&std::u32::MAX) > &1 {
         result.insert(start, 1);
-
         heap.push(DijkstraStateHop {
             asn: start,
             distance: 1,
         });
+    }
+
+    for (_, v) in get_locations_asn(&asn) {
+        for asn in v {
+            heap.push(DijkstraStateHop {
+                asn: asn,
+                distance: 1,
+            });
+            result.insert(asn, 1);
+        }
     }
 
     while let Some(DijkstraStateHop { asn, distance }) = heap.pop() {
@@ -394,7 +405,7 @@ fn dijkstra_hops_limited(
 fn run_estimator_weighted(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
     let mut graph = load_graph(&asn);
     fill_reverse_graph(&mut graph);
-    filter_disconnected(2914, &mut graph);
+    filter_disconnected(2914, &mut graph, asn);
 
     let weights = load_weights_asn(
         &graph.iter().map(|(x, _)| *x).collect::<HashSet<u32>>(),
@@ -403,9 +414,9 @@ fn run_estimator_weighted(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
     let keys = graph.iter().map(|(x, _)| *x).collect::<Vec<u32>>();
 
     let mut results = Vec::new();
-    for asn in keys {
+    for rasn in keys {
         let mut total = 0f64;
-        let res = dijkstra(asn, &graph);
+        let res = dijkstra(rasn, &graph, asn);
         let sum = res
             .iter()
             .map(|(x, y)| {
@@ -413,19 +424,19 @@ fn run_estimator_weighted(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
                 total += weight;
                 weight * (*y as f64)
             }).sum::<f64>();
-        results.push((asn, sum / total));
+        results.push((rasn, sum / total));
         if results.len() % 100 == 0 {
             debug!("{}", results.len());
         }
     }
 
-    let base = dijkstra(64513, &graph);
+    let base = dijkstra(64513, &graph, asn);
     results.sort_by(|(_, x), (_, y)| x.partial_cmp(y).unwrap_or(Ordering::Equal));
     for i in 0..50.min(results.len()) {
         println!("weightedminimal:{},{}", results[i].0, results[i].1);
         // Local effect
         let (before, after, count) =
-            calculate_effect_weighted(&base, &dijkstra(results[i].0, &graph), &weights);
+            calculate_effect_weighted(&base, &dijkstra(results[i].0, &graph, asn), &weights);
         println!(
             "rawminimalcompare:{},{},{},{}",
             results[i].0, before, after, count
@@ -433,7 +444,7 @@ fn run_estimator_weighted(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
     }
 
     let mut baset = 0f64;
-    let base = dijkstra(64512, &graph)
+    let base = dijkstra(64512, &graph, asn)
         .iter()
         .map(|(x, y)| {
             let weight = *weights.get(x).unwrap_or(&0f64);
@@ -503,10 +514,10 @@ fn calculate_effect(base: &HashMap<u32, f32>, result: &HashMap<u32, f32>) -> (f3
 }
 
 fn run_estimator(asnpath: &String) {
-    let asn = load_asn(&asnpath);
+    let asn = &load_asn(&asnpath);
     let mut graph = load_graph(&asn);
     fill_reverse_graph(&mut graph);
-    filter_disconnected(2914, &mut graph);
+    filter_disconnected(2914, &mut graph, asn);
 
     let mut keys = graph.iter().map(|(x, _)| *x).collect::<Vec<u32>>();
     keys.sort();
@@ -514,29 +525,29 @@ fn run_estimator(asnpath: &String) {
 
     {
         let mut results = Vec::new();
-        for asn in &keys {
-            let sum = dijkstra_sum_ms(*asn, &graph);
-            results.push((*asn, sum / graph.len() as f32));
+        for rasn in &keys {
+            let sum = dijkstra_sum_ms(*rasn, &graph, asn);
+            results.push((*rasn, sum / graph.len() as f32));
             if results.len() % 100 == 0 {
                 debug!("{}", results.len());
             }
         }
 
         results.sort_by(|(_, x), (_, y)| x.partial_cmp(y).unwrap_or(Ordering::Equal));
-        let base = dijkstra(64513, &graph);
+        let base = dijkstra(64513, &graph, asn);
         info!(
             "First minimals (base: {}): {:?}",
-            dijkstra_sum_ms(64513, &graph) / graph.len() as f32,
+            dijkstra_sum_ms(64513, &graph, asn) / graph.len() as f32,
             &results[0..(10.min(results.len()))]
         );
         println!(
             "rawminimalbase:{}",
-            dijkstra_sum_ms(64513, &graph) / graph.len() as f32
+            dijkstra_sum_ms(64513, &graph, asn) / graph.len() as f32
         );
         for i in 0..50.min(results.len()) {
             println!("rawminimal:{},{}", results[i].0, results[i].1);
             // Local effect
-            let (before, after, count) = calculate_effect(&base, &dijkstra(results[i].0, &graph));
+            let (before, after, count) = calculate_effect(&base, &dijkstra(results[i].0, &graph, asn));
             println!(
                 "rawminimalcompare:{},{},{},{}",
                 results[i].0, before, after, count
@@ -547,9 +558,9 @@ fn run_estimator(asnpath: &String) {
     // Place with the most effect
     {
         let mut results = Vec::new();
-        let base = dijkstra(64513, &graph);
-        for asn in &keys {
-            let res = dijkstra(*asn, &graph);
+        let base = dijkstra(64513, &graph, asn);
+        for rasn in &keys {
+            let res = dijkstra(*rasn, &graph, asn);
             let mut count = 0;
             for (asn, ms) in &base {
                 if let Some(r) = res.get(&asn) {
@@ -559,14 +570,14 @@ fn run_estimator(asnpath: &String) {
                 }
             }
 
-            results.push((asn, count));
+            results.push((rasn, count));
             if results.len() % 100 == 0 {
                 debug!("{}", results.len());
             }
         }
         results.sort_by(|(_, x), (_, y)| y.partial_cmp(x).unwrap_or(Ordering::Equal));
         for i in 0..50.min(results.len()) {
-            let (before, after, count) = calculate_effect(&base, &dijkstra(*results[i].0, &graph));
+            let (before, after, count) = calculate_effect(&base, &dijkstra(*results[i].0, &graph, asn));
             println!(
                 "rawareamaximal:{},{},{},{}",
                 results[i].0, before, after, count
@@ -575,64 +586,32 @@ fn run_estimator(asnpath: &String) {
     }
 }
 
-fn dijkstra_sum_ms(start: u32, graph: &HashMap<u32, HashMap<u32, f32>>) -> f32 {
+fn dijkstra_sum_ms(start: u32, graph: &HashMap<u32, HashMap<u32, f32>>, asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) -> f32 {
     // Naive implementation, use dijstra to populate.
-    let r = dijkstra(start, graph).iter().map(|(_, y)| *y).sum::<f32>();
+    let r = dijkstra(start, graph, asn).iter().map(|(_, y)| *y).sum::<f32>();
     return r;
 }
 
 // Calculate the dijkstra distance graph
-fn dijkstra(start: u32, graph: &HashMap<u32, HashMap<u32, f32>>) -> HashMap<u32, f32> {
+fn dijkstra(start: u32, graph: &HashMap<u32, HashMap<u32, f32>>, asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) -> HashMap<u32, f32> {
     const BASE_DISTANCE: f32 = 10f32; // Base latency to connect to the given asn
     let mut result: HashMap<u32, f32> = HashMap::new();
-
     let mut heap = BinaryHeap::new(); // Note: This is a max heap
     result.insert(start, BASE_DISTANCE);
-    result.insert(27678, 0f32); //merced
-    result.insert(22548, 0f32); //saopaulo
-    result.insert(25192, 0f32); //praga
-    result.insert(14259, 0f32); //tucapel
-    result.insert(715, 0f32); //amsterdam
-    result.insert(40528, 0f32); //elsegundo
-    result.insert(22894, 0f32); //monterrey
-    result.insert(264806, 0f32); // arica
-
     heap.push(DijkstraState {
         asn: start,
         distance: BASE_DISTANCE,
     });
-    heap.push(DijkstraState {
-        asn: 27678,
-        distance: 0f32,
-    }); //merced
-    heap.push(DijkstraState {
-        asn: 22548,
-        distance: 0f32,
-    }); //saopaulo
-    heap.push(DijkstraState {
-        asn: 25192,
-        distance: 0f32,
-    }); //praga
-    heap.push(DijkstraState {
-        asn: 14259,
-        distance: 0f32,
-    }); //tucapel
-    heap.push(DijkstraState {
-        asn: 715,
-        distance: 0f32,
-    }); //amsterdam
-    heap.push(DijkstraState {
-        asn: 40528,
-        distance: 0f32,
-    }); //elsegundo
-    heap.push(DijkstraState {
-        asn: 22894,
-        distance: 0f32,
-    }); //monterrey
-    heap.push(DijkstraState {
-        asn: 264806,
-        distance: 0f32,
-    }); //arica
+    
+    for (_, v) in get_locations_asn(&asn) {
+        for asn in v {
+            heap.push(DijkstraState {
+                asn: asn,
+                distance: 0f32,
+            });
+            result.insert(asn, 0f32);
+        }
+    }
 
     while let Some(DijkstraState { asn, distance }) = heap.pop() {
         if distance > *result.get(&asn).unwrap_or(&std::f32::MAX) {
@@ -711,9 +690,9 @@ fn fill_reverse_graph(graph: &mut HashMap<u32, HashMap<u32, f32>>) {
 }
 
 /// Remove disconnected nodes from a base AS
-fn filter_disconnected(base: u32, graph: &mut HashMap<u32, HashMap<u32, f32>>) {
+fn filter_disconnected(base: u32, graph: &mut HashMap<u32, HashMap<u32, f32>>, asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
     let keys = graph.iter().map(|(x, _)| *x).collect::<Vec<u32>>();
-    let founded_keys = dijkstra(base, graph)
+    let founded_keys = dijkstra(base, graph, asn)
         .iter()
         .map(|(x, _)| *x)
         .collect::<HashSet<u32>>();
