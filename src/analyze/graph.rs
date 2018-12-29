@@ -7,7 +7,7 @@ use self::geo::Point;
 use self::treebitmap::IpLookupTable;
 use analyze::helper::{
     generate_citytable, generate_geotable, ip_normalize, load_area, load_asn, load_data,
-    load_weights, CityLoc, GeoLoc,
+    load_weights, CityLoc, GeoLoc, get_locations, get_locations_asn,
 };
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
@@ -92,7 +92,8 @@ impl PartialOrd for Node {
 fn analyze_paths(
     graph: &HashMap<Ipv4Addr, HashMap<u32, Vec<(Ipv4Addr, u32)>>>,
     asn: &IpLookupTable<Ipv4Addr, Vec<u32>>,
-    start: (Ipv4Addr, u32),
+    //start: (Ipv4Addr, u32),
+    start: &Vec<Ipv4Addr>,
 ) -> HashMap<(Ipv4Addr, u32), u32> {
     debug!("analyze paths");
 
@@ -101,8 +102,12 @@ fn analyze_paths(
     let mut paths = HashMap::<(Ipv4Addr, u32), Vec<(Ipv4Addr, u32)>>::with_capacity(graph.len());
     let mut heap = BinaryHeap::new();
 
-    heap.push(Node { ip: start, dist: 0 });
-    paths.insert(start, Vec::new());
+    //heap.push(Node { ip: start, dist: 0 });
+    //paths.insert(start, Vec::new());
+    for ip in start {
+        heap.push(Node {ip: (*ip, 0), dist: 0});
+        paths.insert((*ip, 0), Vec::new());
+    }
 
     //info!("test src{:?}", graph.get(&"45.71.8.0".parse::<Ipv4Addr>().unwrap()));
 
@@ -180,6 +185,29 @@ fn analyze_paths(
     return distance;
 }
 
+pub fn generate_asgraph(paths: &HashMap<(Ipv4Addr, u32), Vec<(Ipv4Addr, u32)>>,
+    asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) -> HashMap<u32, HashSet<u32>> {
+    let mut graph: HashMap<u32, HashSet<u32>> = HashMap::new();
+    for (_, ip_path) in paths.iter() {
+        //let path = result.entry(*target).or_insert(Vec::new());
+        for i in 0..(ip_path.len().saturating_sub(1)) {
+            if ip_path[i].1 + 1 == ip_path[i+1].1 {
+                if let Some((_, _, asn1)) = asn.longest_match(ip_path[i].0) {
+                    if let Some((_, _, asn2)) = asn.longest_match(ip_path[i+1].0) {
+                        for asn1 in asn1 {
+                            for asn2 in asn2 {
+                                graph.entry(*asn1).or_insert(HashSet::new()).insert(*asn2);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return graph;
+}
+
 /// Transform the /24 paths to AS paths
 fn paths_to_asn(
     paths: &HashMap<(Ipv4Addr, u32), Vec<(Ipv4Addr, u32)>>,
@@ -244,9 +272,15 @@ fn check_aspath_hops(aspath: &HashMap<(Ipv4Addr, u32), Vec<u32>>) {
         .collect::<Vec<(u32, u32)>>();
     count.sort_by_key(|(_, y)| *y);
     count.reverse();
-    info!("Most as with multiple hop count: {:?}", &count[0..10]);
-    for (x, y) in count.iter() {
-        println!("jumpcount:{},{}", x, y);
+    info!("Most AS tha are in different hop count: {:?}", &count[0..10]);
+
+    
+    let mut mapping = HashMap::new();
+    for (asn, levels) in result.iter() {
+        mapping.entry(levels.iter().max().unwrap() + 1).or_insert(HashSet::new()).insert(asn);
+    }
+    for (x, y) in mapping.iter() {
+        info!("jumpcount:{},{}", x, y.len());
     }
 }
 
@@ -385,18 +419,25 @@ pub fn graph_info() {
     // tucapel: (190.153.177.0, 0)
     let arguments = env::args().collect::<Vec<String>>();
     if arguments.len() < 5 {
-        panic!("Argments: <traces.csv> <asn.csv> <ip>");
+        panic!("Argments: <traces.csv> <asn.csv> <location>");
     }
     let tracepath = arguments[2].clone();
     let asnpath = arguments[3].clone();
-    let origin: Ipv4Addr = arguments[4].clone().parse().unwrap();
+    let origin = arguments[4].clone();
 
     let graph = generate_iplink(&tracepath);
     let asn = load_asn(&asnpath);
+    //println!("{:?}", asn.longest_match(Ipv4Addr::new(45, 238,152,1)));
+    //println!("{:?}", asn.longest_match(Ipv4Addr::new(200, 23,206,58)));
+    //return;
+    //let _distance = analyze_paths(&graph, &asn, (origin, 0));
     //let _distance = analyze_paths(&graph, &asn, (Ipv4Addr::new(45, 71, 8, 0), 0));
     //let _distance = analyze_paths(&graph, &asn, (Ipv4Addr::new(200, 1, 123, 0), 0));
-    let _distance = analyze_paths(&graph, &asn, (origin, 0));
     //let _distance = analyze_paths(&graph, &asn, (Ipv4Addr::new(190, 153, 177, 0), 0));
+    let locations = get_locations();
+    info!("{:?}", get_locations_asn(&asn));
+
+    let _distance = analyze_paths(&graph, &asn, locations.get(&origin).unwrap());
 
     let area = load_area(&tracepath);
     geolocalize(&area);

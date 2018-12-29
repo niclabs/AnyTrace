@@ -336,3 +336,46 @@ where
 pub fn load_weights(filter: &HashMap<Ipv4Addr, Vec<u64>>) -> HashMap<Ipv4Addr, f64> {
     return load_weights_lambda(|x| filter.contains_key(x));
 }
+
+pub fn get_locations() -> HashMap<String, Vec<Ipv4Addr>> {
+    let mut locs = HashMap::new();
+    locs.insert("arica".to_string(), vec![
+        Ipv4Addr::new(170,79,233,0),
+        Ipv4Addr::new(190,124,27,0),
+        Ipv4Addr::new(200,7,5,0),
+        Ipv4Addr::new(45,160,6,0),
+        Ipv4Addr::new(45,160,7,0),
+        Ipv4Addr::new(45,71,8,0),
+    ]);
+    locs.insert("tucapel".to_string(), vec![
+        Ipv4Addr::new(190,124,27,0),
+        Ipv4Addr::new(190,153,177,0),
+        Ipv4Addr::new(190,215,161,0),
+    ]);
+    locs.insert("saopaulo".to_string(), vec![
+        Ipv4Addr::new(190,124,27,0),
+        Ipv4Addr::new(200,160,0,0),
+    ]);
+    locs.insert("merced".to_string(), vec![
+        Ipv4Addr::new(190,124,27,0),
+        Ipv4Addr::new(200,1,121,0),
+        Ipv4Addr::new(200,1,123,0),
+    ]);
+    return locs;
+}
+
+pub fn get_locations_asn(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) -> HashMap<String, HashSet<u32>> {
+    let locs = get_locations();
+    let mut result = HashMap::new();
+    for (k, v) in locs.iter() {
+        for ip in v.iter() {
+            if let Some((_, _, asn)) = asn.longest_match(*ip) {
+                for asn in asn {
+                    result.entry(k.to_string()).or_insert(HashSet::new()).insert(*asn);
+                }
+            }
+        }
+    }
+
+    return result;
+}
