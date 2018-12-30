@@ -15,7 +15,7 @@ use std::net::Ipv4Addr;
 
 use self::bzip2::read::BzDecoder;
 use self::treebitmap::IpLookupTable;
-use analyze::helper::{load_asn, load_data, load_weights_asn, get_locations_asn};
+use analyze::helper::{load_asn, load_data, load_weights_asn, get_locations_asn, get_all_traces};
 
 pub fn estimator() {
     let arguments = env::args().collect::<Vec<String>>();
@@ -82,14 +82,19 @@ fn generate_asmap(
     return result;
 }
 fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
-    let traces = [
-        "result/saopaulo.icmp.join".to_string(),
-        "result/arica.icmp.join".to_string(),
-        "result/merced.icmp.join".to_string(),
-        "result/tucapel.icmp.join".to_string(),
-    ];
+    let traces = get_all_traces();
 
     let mut result = HashMap::new();
+    let mut graph = load_graph(asn);
+    fill_reverse_graph(&mut graph);
+    filter_disconnected(2914, &mut graph, asn);
+    for (k, v) in graph.iter() {
+        for (t, _) in v {
+            //result.entry(*k).or_insert(HashSet::new()).insert(*t);
+        }
+    }
+
+
     let mut counter = 0;
     for trace in traces.iter() {
         let mut map = generate_asmap(asn, trace);
@@ -149,10 +154,11 @@ fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
     // and only offer new places on known networks
     {
         let mut dist = Vec::new();
-        for rasn in result.keys() {
+        for rasn in result.keys() {if *rasn != 1200 {continue;}
             let r = dijkstra_hops(*rasn, &result, asn);
             let value = r.iter().map(|(_, y)| y).sum::<u32>();
             dist.push((*rasn, value));
+            println!("{}", value);
 
             if dist.len() % 100 == 0 {
                 debug!("{}", dist.len());
@@ -162,6 +168,7 @@ fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
         info!("Best results raw: {:?}", &dist[0..10.min(dist.len())]);
 
         let base = dijkstra_hops(4200000000, &result, asn).iter().map(|(x,y)| (*x,*y as f32)).collect::<HashMap<u32, f32>>();
+        println!("hoprawbase:{}", dijkstra_hops(4200000000, &result, asn).iter().map(|(_, y)| y).sum::<u32>());
         for i in 0..50.min(dist.len()) {
             println!("hopraw:{},{}", dist[i].0, dist[i].1);
             // Local effect
@@ -182,7 +189,7 @@ fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
     let weights = load_weights_asn(&dist.iter().map(|(x, _)| *x).collect::<HashSet<u32>>(), asn);
     {
         let mut dist = Vec::new();
-        for rasn in result.keys() {
+        for rasn in result.keys() {if *rasn != 1200 {continue;}
             let r = dijkstra_hops(*rasn, &result, asn);
             let mut sumweight = 0f64;
             let value = r
@@ -225,7 +232,7 @@ fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
         let base_dist = base.iter().map(|(_, y)| y).sum::<u32>();
         //let max_hops = 0;
         let mut dist = Vec::new();
-        for rasn in result.keys() {
+        for rasn in result.keys() {if *rasn != 1200 {continue;}
             let r = dijkstra_hops_limited(*rasn, max_hops, &result, &base, asn);
             let value = r.iter().map(|(_, y)| y).sum::<u32>();
             dist.push((*rasn, value));
@@ -264,7 +271,7 @@ fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
             .sum::<f64>();
         let mut dist = Vec::new();
         //let max_hops = 0;
-        for rasn in result.keys() {
+        for rasn in result.keys() {if *rasn != 1200 {continue;}
             let mut sumweight = 0f64;
             let r = dijkstra_hops_limited(*rasn, max_hops, &result, &base, asn);
             let value = r
@@ -499,6 +506,7 @@ fn calculate_effect(base: &HashMap<u32, f32>, result: &HashMap<u32, f32>) -> (f3
                 count += 1;
                 after += ms;
                 before += r;
+                println!("changeasn:{}", asn);
             }
         }
     }
@@ -525,7 +533,7 @@ fn run_estimator(asnpath: &String) {
 
     {
         let mut results = Vec::new();
-        for rasn in &keys {
+        for rasn in &keys {if *rasn != 1200 {continue;}
             let sum = dijkstra_sum_ms(*rasn, &graph, asn);
             results.push((*rasn, sum / graph.len() as f32));
             if results.len() % 100 == 0 {
@@ -559,7 +567,7 @@ fn run_estimator(asnpath: &String) {
     {
         let mut results = Vec::new();
         let base = dijkstra(64513, &graph, asn);
-        for rasn in &keys {
+        for rasn in &keys {if *rasn != 1200 {continue;}
             let res = dijkstra(*rasn, &graph, asn);
             let mut count = 0;
             for (asn, ms) in &base {
@@ -804,13 +812,7 @@ fn load_anycast_graph(
     out_graph: &mut HashMap<u32, HashMap<u32, Vec<f32>>>,
     asn: &IpLookupTable<Ipv4Addr, Vec<u32>>,
 ) {
-    //let paths = vec!["result/saopaulo.icmp.join"];
-    let paths = [
-        "result/arica.icmp.join".to_string(),
-        "result/merced.icmp.join".to_string(),
-        "result/tucapel.icmp.join".to_string(),
-        "result/saopaulo.icmp.join".to_string(),
-    ];
+    let paths = get_all_traces();
 
     for path in paths.iter() {
         let mut table = HashMap::new();

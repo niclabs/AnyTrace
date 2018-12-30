@@ -104,10 +104,23 @@ fn analyze_paths(
 
     //heap.push(Node { ip: start, dist: 0 });
     //paths.insert(start, Vec::new());
+    // search for the first valid hop
     for ip in start {
-        heap.push(Node {ip: (*ip, 0), dist: 0});
-        paths.insert((*ip, 0), Vec::new());
+        for i in 0..5 {
+            for nodes in graph.get(&ip) {
+                if nodes.contains_key(&i) {
+                    heap.push(Node {ip: (*ip, i), dist: 0});
+                    paths.insert((*ip, i), Vec::new());
+                    break;
+                }
+            }
+        }
     }
+    //for ip in start {
+    //    heap.push(Node {ip: (*ip, 2), dist: 0});
+    //    paths.insert((*ip, 0), Vec::new());
+    //}
+    //error!("{:?}", nodes.get());
 
     //info!("test src{:?}", graph.get(&"45.71.8.0".parse::<Ipv4Addr>().unwrap()));
 

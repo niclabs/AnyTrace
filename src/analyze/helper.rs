@@ -299,16 +299,6 @@ where
     F: Fn(&Ipv4Addr) -> bool,
 {
     let captures = vec![
-        /*
-            "data/merced.gz",
-            "data/captures/amsterdam.gz",
-            "data/captures/elsegundo.gz",
-            "data/captures/monterreya.gz",
-            "data/captures/redwood.gz",
-            "data/captures/buenosaires.gz",
-            "data/captures/lima.gz",
-            "data/captures/praga.gz",
-            "data/captures/tokio.gz",*/
         "data/capture/saopaulo.gz",
         "data/capture/merced.gz",
         "data/capture/tucapel.gz",
@@ -338,29 +328,43 @@ pub fn load_weights(filter: &HashMap<Ipv4Addr, Vec<u64>>) -> HashMap<Ipv4Addr, f
 }
 
 pub fn get_locations() -> HashMap<String, Vec<Ipv4Addr>> {
+    const dataset: u32 = 2;
     let mut locs = HashMap::new();
-    locs.insert("arica".to_string(), vec![
-        Ipv4Addr::new(170,79,233,0),
-        Ipv4Addr::new(190,124,27,0),
-        Ipv4Addr::new(200,7,5,0),
-        Ipv4Addr::new(45,160,6,0),
-        Ipv4Addr::new(45,160,7,0),
-        Ipv4Addr::new(45,71,8,0),
-    ]);
-    locs.insert("tucapel".to_string(), vec![
-        Ipv4Addr::new(190,124,27,0),
-        Ipv4Addr::new(190,153,177,0),
-        Ipv4Addr::new(190,215,161,0),
-    ]);
-    locs.insert("saopaulo".to_string(), vec![
-        Ipv4Addr::new(190,124,27,0),
-        Ipv4Addr::new(200,160,0,0),
-    ]);
-    locs.insert("merced".to_string(), vec![
-        Ipv4Addr::new(190,124,27,0),
-        Ipv4Addr::new(200,1,121,0),
-        Ipv4Addr::new(200,1,123,0),
-    ]);
+    if dataset == 1 {
+        locs.insert("arica".to_string(), vec![
+            Ipv4Addr::new(170,79,233,0),
+            Ipv4Addr::new(190,124,27,0),
+            Ipv4Addr::new(200,7,5,0),
+            Ipv4Addr::new(45,160,6,0),
+            Ipv4Addr::new(45,160,7,0),
+            Ipv4Addr::new(45,71,8,0),
+        ]);
+        locs.insert("tucapel".to_string(), vec![
+            Ipv4Addr::new(190,124,27,0),
+            Ipv4Addr::new(190,153,177,0),
+            Ipv4Addr::new(190,215,161,0),
+        ]);
+        locs.insert("saopaulo".to_string(), vec![
+            Ipv4Addr::new(190,124,27,0),
+            Ipv4Addr::new(200,160,0,0),
+        ]);
+        locs.insert("merced".to_string(), vec![
+            Ipv4Addr::new(190,124,27,0),
+            Ipv4Addr::new(200,1,121,0),
+            Ipv4Addr::new(200,1,123,0),
+        ]);
+    } else if dataset == 2 {
+        locs.insert("ufmg". to_string(), vec![
+            Ipv4Addr::new(140,197,247,0),
+            Ipv4Addr::new(205,121,0,0),
+        ]);
+        locs.insert("seattle".to_string(), vec![
+            Ipv4Addr::new(172,19,0,0),
+        ]);
+        //locs.insert("amsterdam".to_string(), vec![
+        //    Ipv4Addr::new(80,249,208,0),
+        //]);
+    }
     return locs;
 }
 
@@ -378,4 +382,20 @@ pub fn get_locations_asn(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) -> HashMap<Str
     }
 
     return result;
+}
+
+pub fn get_all_traces() -> Vec<String> {
+    return vec![
+        "result/peering/test3.seattle.csv".to_string(),
+        "result/peering/test3.ufmg.csv".to_string(),
+        //"result/peering/test1.seattle.csv".to_string(),
+        //"result/peering/test1.ufmg.csv".to_string(),
+        //"result/peering/test1.amsterdam.csv".to_string(),
+    ];
+/*    return vec![
+        "result/arica.icmp.join".to_string(),
+        "result/merced.icmp.join".to_string(),
+        "result/tucapel.icmp.join".to_string(),
+        "result/saopaulo.icmp.join".to_string(),
+    ];*/
 }
