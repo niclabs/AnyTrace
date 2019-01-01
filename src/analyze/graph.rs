@@ -251,11 +251,11 @@ fn paths_to_asn(
         println!("asncount:{},{}", x, y)
     }
 
-    check_aspath_hops(&result);
+    check_aspath_hops(&result, asn);
 }
 
 /// Check the hops of a AS path graph
-fn check_aspath_hops(aspath: &HashMap<(Ipv4Addr, u32), Vec<u32>>) {
+fn check_aspath_hops(aspath: &HashMap<(Ipv4Addr, u32), Vec<u32>>, asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
     let mut result = HashMap::new();
 
     for (_, path) in aspath {
@@ -279,8 +279,30 @@ fn check_aspath_hops(aspath: &HashMap<(Ipv4Addr, u32), Vec<u32>>) {
     for (asn, levels) in result.iter() {
         mapping.entry(levels.iter().max().unwrap() + 1).or_insert(HashSet::new()).insert(asn);
     }
-    for (x, y) in mapping.iter() {
-        info!("jumpcount:{},{}", x, y.len());
+
+    for i in 1..(mapping.keys().max().unwrap() + 1) {
+        println!("hopcount:{},{}", i, mapping.get(&i).unwrap_or(&HashSet::new()).len());
+    }
+
+
+    // See the ttl by asn, only show the first time it appears
+    let mut result = HashMap::new();
+    for (ip, ttl) in aspath.keys() {
+        if let Some((_, _, asn)) = asn.longest_match(*ip) {
+            for asn in asn {
+                result.entry(asn).or_insert(HashSet::new()).insert(ttl);
+            }
+        }
+    }
+
+    // Invert the map
+    let mut ttlmap = HashMap::new();
+    for (asn, ttl) in result.iter() {
+        ttlmap.entry(*ttl.iter().min().unwrap()).or_insert(Vec::new()).push(*asn);
+    }
+
+    for i in 1..(**ttlmap.keys().max().unwrap() + 1) {
+        println!("asnttl:{},{}", i, ttlmap.get(&i).unwrap_or(&Vec::new()).len());
     }
 }
 
@@ -407,7 +429,7 @@ fn geolocalize_weighted(area: &HashMap<Ipv4Addr, Vec<u64>>) {
         println!(
             "countryweight:{},{}",
             loc.country,
-            count / result.iter().map(|(_, x)| *x).sum::<f64>()
+            count / result.values().sum::<f64>()
         );
     }
 }
@@ -464,6 +486,12 @@ fn geotest_weighted(area: &HashMap<Ipv4Addr, Vec<u64>>, city: &IpLookupTable<Ipv
 
     let mut result = HashMap::new();
     let mut result_count = HashMap::new();
+
+    for (_, name) in locs.iter() {
+        result.insert(*name, 0f64);
+        result_count.insert(*name, 0);
+    }
+
     for (ip, _) in area.iter() {
         if let Some((_, _, loc)) = city.longest_match(*ip) {
             if loc.accuracy >= 1000 {
@@ -493,8 +521,11 @@ fn geotest_weighted(area: &HashMap<Ipv4Addr, Vec<u64>>, city: &IpLookupTable<Ipv
     );
 
     let sum = result_count.iter().map(|(_, y)| *y).sum::<u32>() as f64;
+    for (place, count) in result_count.iter() {
+        println!("assigned:{},{}", place, count);
+    }
     for (place, count) in result_count {
-        println!("assigned:{},{}", place, count as f64 / sum);
+        println!("assignednorm:{},{}", place, count as f64 / sum);
     }
 
     let sum = result.iter().map(|(_, y)| *y).sum::<f64>();
