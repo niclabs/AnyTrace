@@ -33,7 +33,7 @@ pub fn generate_iplink(
         let data = &measurement.data;
         let l = data.len();
 
-        for m in data {
+        for m in data.iter() {
             // latency measurement
             if let Some(m) = m {
                 let _current = ms

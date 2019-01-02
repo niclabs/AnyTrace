@@ -64,7 +64,7 @@ cat result/final/geo.tucapel |  awk 'BEGIN {FS=":"} {if ($1 == "assignedweighted
 ### Generate graphs
 # asncount
 for a in "arica" "merced" "saopaulo" "tucapel"; do
-    python result/final/plot.py ./result/final/geo/asncount.$a.csv ./result/final/graph/geo/asncount.$a.png 10 "$a: Network Count Vs ASN" "ASN" "Network Count"
+    python result/final/plot.py ./result/final/geo/asncount.$a.csv ./result/final/graph/geo/asncount.$a.png 10 "$a: Numero de Redes /24 por Sistema Autonomo" "Sistema Autonomo" "Numero de Redes"
 done
 # jumpcount
 # Distance (TODO: Better graph)
@@ -73,23 +73,23 @@ done
 #done
 # country
 for a in "arica" "merced" "saopaulo" "tucapel"; do
-    python result/final/plot.py ./result/final/geo/country.$a.csv ./result/final/graph/geo/country.$a.png 10 "$a: Network Count Vs Country Code" "Country Code" "Network Count"
+    python result/final/plot.py ./result/final/geo/country.$a.csv ./result/final/graph/geo/country.$a.png 10 "$a: Numero de Redes por País" "Codigo País" "Numero de Redes"
 done
 # countryweight
 for a in "arica" "merced" "saopaulo" "tucapel"; do
-    python result/final/plot.py ./result/final/geo/countryweight.$a.csv ./result/final/graph/geo/countryweight.$a.png 10 "$a: Weighted Network Count Vs Country Code" "Country Code" "Weighted Network Count"
+    python result/final/plot.py ./result/final/geo/countryweight.$a.csv ./result/final/graph/geo/countryweight.$a.png 10 "$a: Media Ponderada de Redes por País" "Codigo País" "Media Ponderada de Redes"
 done
 # countryas
 for a in "arica" "merced" "saopaulo" "tucapel"; do
-    python result/final/plot.py ./result/final/geo/countryas.$a.csv ./result/final/graph/geo/countryas.$a.png 10 "$a: AS Count Vs Country Code" "Country Code" "AS Count"
+    python result/final/plot.py ./result/final/geo/countryas.$a.csv ./result/final/graph/geo/countryas.$a.png 10 "$a: Numero de Sistemas Autonomos por País" "Codigo País" "Numero de Sistemas Autonomos"
 done
 # assigned
 for a in "arica" "merced" "saopaulo" "tucapel"; do
-    python result/final/plot.py ./result/final/geo/assigned.$a.csv ./result/final/graph/geo/assigned.$a.png 10 "$a: AS Count Vs Country Code" "Country Code" "AS Count"
+    python result/final/plot.py ./result/final/geo/assigned.$a.csv ./result/final/graph/geo/assigned.$a.png 10 "$a: Asignación de Sistemas Autonomos Segun Distancia" "Nodo" "Numero de Sistemas Autonomos"
 done
 # assignedweighted
 for a in "arica" "merced" "saopaulo" "tucapel"; do
-    python result/final/plot.py ./result/final/geo/assignedweighted.$a.csv ./result/final/graph/geo/assignedweighted.$a.png 10 "$a: AS Count Vs Country Code" "Country Code" "AS Count"
+    python result/final/plot.py ./result/final/geo/assignedweighted.$a.csv ./result/final/graph/geo/assignedweighted.$a.png 10 "$a: Asignación Ponderada de Sistemas Autonomos Segun Distancia" "Nodo" "Media Ponderada de Sistemas Autonomos"
 done
 
 
@@ -123,13 +123,13 @@ cat result/final/latency.tucapel | awk 'BEGIN {FS=":"} {if ($1 == "weightedlaten
 
 # Generate graphs (TODO: Change axis when using weights)
 for a in "arica" "merced" "saopaulo" "tucapel"; do
-    python result/final/plot.py ./result/final/latency/networklatency.$a.csv ./result/final/graph/latency/networklatency.$a.png 50 "/24 Network Count Vs Round Trip Time" "Round Trip Time" "/24 Network Count" 0
+    python result/final/plot.py ./result/final/latency/networklatency.$a.csv ./result/final/graph/latency/networklatency.$a.png 50 "Tiempo de Retorno por Red /24" "Round Trip Time" "/24 Network Count" 0
 done
 for a in "arica" "merced" "saopaulo" "tucapel"; do
-    python result/final/plot.py ./result/final/latency/aslatency.$a.csv ./result/final/graph/latency/aslatency.$a.png 50 "AS Count Vs Round Trip Time" "Round Trip Time" "AS Count" 0
+    python result/final/plot.py ./result/final/latency/aslatency.$a.csv ./result/final/graph/latency/aslatency.$a.png 50 "Tiempo de Retorno por Cantidad de Sistemas Autonomos" "Tiempo de Retorno" "Cantidad de Sistemas Autonomos" 0
 done
 for a in "arica" "merced" "saopaulo" "tucapel"; do
-    python result/final/plot.py ./result/final/latency/weightedlatency.$a.csv ./result/final/graph/latency/weightedlatency.$a.png 50 "Weighted Client Count Vs Round Trip Time" "Round Trip Time" "Weighted Client Count" 0
+    python result/final/plot.py ./result/final/latency/weightedlatency.$a.csv ./result/final/graph/latency/weightedlatency.$a.png 50 "Tiempo de Retorno segun Media Ponderada de Clientes" "Tiempo de Retorno" "Media Ponderada de Clientes" 0
 done
 
 
@@ -152,15 +152,15 @@ cat result/final/estimator.raw | awk 'BEGIN {FS=":"} {if ($1 == "rawminimalcompa
 cat result/final/estimator.raw | awk 'BEGIN {FS=":"} {if ($1 == "rawareamaximal") {print $2;}}' > result/final/estimator/raw.count.csv
 cat result/final/estimator.weighted | awk 'BEGIN {FS=":"} {if ($1 == "rawminimalcompare") {print $2;}}' > result/final/estimator/weighted.min.csv
 
-python result/final/plotmultibar.py ./result/final/estimator/raw.min.csv ./result/final/graph/estimator/raw.min.png 10 "Title" "ASN" "Latencia" "RTT Inicial,RRT Final,AS Afectados"
-python result/final/plotmultibar.py ./result/final/estimator/raw.count.csv ./result/final/graph/estimator/raw.count.png 10 "Title" "ASN" "Latencia" "RTT Inicial,RRT Final,AS Afectados"
-python result/final/plotmultibar.py ./result/final/estimator/weighted.min.csv ./result/final/graph/estimator/weighted.min.png 10 "Title" "ASN" "Latencia" "RTT Inicial,RRT Final,AS Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/raw.min.csv ./result/final/graph/estimator/raw.min.png 10 "Title" "ASN" "Latencia" "AS Afectados" "RTT Inicial,RRT Final,AS Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/raw.count.csv ./result/final/graph/estimator/raw.count.png 10 "Title" "ASN" "Latencia" "AS Afectados" "RTT Inicial,RRT Final,AS Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/weighted.min.csv ./result/final/graph/estimator/weighted.min.png 10 "Title" "ASN" "Latencia" "AS Afectados" "RTT Inicial,RRT Final,AS Afectados"
 
 # Hop
 cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "hoprawcompare") {print $2;}}' > result/final/estimator/hop.raw.csv
 cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "hopweightcompare") {print $2;}}' > result/final/estimator/hop.wgt.csv
-python result/final/plotmultibar.py ./result/final/estimator/hop.raw.csv ./result/final/graph/estimator/hop.raw.png 10 "Title" "ASN" "Latencia" "RTT Inicial,RRT Final,AS Afectados"
-python result/final/plotmultibar.py ./result/final/estimator/hop.wgt.csv ./result/final/graph/estimator/hop.wgt.png 10 "Title" "ASN" "Latencia" "RTT Inicial,RRT Final,AS Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/hop.raw.csv ./result/final/graph/estimator/hop.raw.png 10 "Title" "ASN" "Latencia" "AS Afectados" "RTT Inicial,RRT Final,AS Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/hop.wgt.csv ./result/final/graph/estimator/hop.wgt.png 10 "Title" "ASN" "Latencia" "AS Afectados" "RTT Inicial,RRT Final,AS Afectados"
 
 # Limited raw
 cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "limitedrawcompare1") {print $2;}}' > result/final/estimator/hop.cmp1.csv
@@ -168,10 +168,10 @@ cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "limitedrawcompa
 cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "limitedrawcompare3") {print $2;}}' > result/final/estimator/hop.cmp3.csv
 cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "limitedrawcompare4") {print $2;}}' > result/final/estimator/hop.cmp4.csv
 
-python result/final/plotmultibar.py ./result/final/estimator/hop.cmp1.csv ./result/final/graph/estimator/hop.cmp1.png 10 "Title" "ASN" "Latencia" "Saltos Iniciales,Saltos Finales,AS Afectados"
-python result/final/plotmultibar.py ./result/final/estimator/hop.cmp2.csv ./result/final/graph/estimator/hop.cmp2.png 10 "Title" "ASN" "Latencia" "Saltos Iniciales,Saltos Finales,AS Afectados"
-python result/final/plotmultibar.py ./result/final/estimator/hop.cmp3.csv ./result/final/graph/estimator/hop.cmp3.png 10 "Title" "ASN" "Latencia" "Saltos Iniciales,Saltos Finales,AS Afectados"
-python result/final/plotmultibar.py ./result/final/estimator/hop.cmp4.csv ./result/final/graph/estimator/hop.cmp4.png 10 "Title" "ASN" "Latencia" "Saltos Iniciales,Saltos Finales,AS Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/hop.cmp1.csv ./result/final/graph/estimator/hop.cmp1.png 10 "Title" "ASN" "Latencia" "AS Afectados" "Saltos Iniciales,Saltos Finales,AS Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/hop.cmp2.csv ./result/final/graph/estimator/hop.cmp2.png 10 "Title" "ASN" "Latencia" "AS Afectados" "Saltos Iniciales,Saltos Finales,AS Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/hop.cmp3.csv ./result/final/graph/estimator/hop.cmp3.png 10 "Title" "ASN" "Latencia" "AS Afectados" "Saltos Iniciales,Saltos Finales,AS Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/hop.cmp4.csv ./result/final/graph/estimator/hop.cmp4.png 10 "Title" "ASN" "Latencia" "AS Afectados" "Saltos Iniciales,Saltos Finales,AS Afectados"
 
 # Limited weighted
 cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "hopweightcompare1") {print $2;}}' > result/final/estimator/hop.wgtcmp1.csv

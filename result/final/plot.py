@@ -29,12 +29,6 @@ with open(filename,'r') as csvfile:
         x.append(str(row[0]))
         y.append(float(row[1]))
 
-with open(filename,'r') as csvfile:
-    plots = csv.reader(csvfile, delimiter=',', escapechar="\\")
-    for row in plots:
-        x.append(str(row[0]))
-        y.append(float(row[1]))
-
 if limit > 0:
     if dosort:
         x = [a for _,a in sorted(zip(y, x), reverse=True)]
