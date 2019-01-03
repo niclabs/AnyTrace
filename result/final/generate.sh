@@ -19,12 +19,12 @@ cat result/final/geo.merced |  awk 'BEGIN {FS=":"} {if ($1 == "asncount") {print
 cat result/final/geo.saopaulo |  awk 'BEGIN {FS=":"} {if ($1 == "asncount") {print $2;}}' > result/final/geo/asncount.saopaulo.csv
 cat result/final/geo.tucapel |  awk 'BEGIN {FS=":"} {if ($1 == "asncount") {print $2;}}' > result/final/geo/asncount.tucapel.csv
 
-### jumpcount
+### hopcount
 #Cantidad de saltos maxima (hops) desde la entrada hasta la salida de un AS.
-cat result/final/geo.arica |  awk 'BEGIN {FS=":"} {if ($1 == "jumpcount") {print $2;}}' > result/final/geo/jumpcount.arica.csv
-cat result/final/geo.merced |  awk 'BEGIN {FS=":"} {if ($1 == "jumpcount") {print $2;}}' > result/final/geo/jumpcount.merced.csv
-cat result/final/geo.saopaulo |  awk 'BEGIN {FS=":"} {if ($1 == "jumpcount") {print $2;}}' > result/final/geo/jumpcount.saopaulo.csv
-cat result/final/geo.tucapel |  awk 'BEGIN {FS=":"} {if ($1 == "jumpcount") {print $2;}}' > result/final/geo/jumpcount.tucapel.csv
+cat result/final/geo.arica |  awk 'BEGIN {FS=":"} {if ($1 == "hopcount") {print $2;}}' > result/final/geo/hopcount.arica.csv
+cat result/final/geo.merced |  awk 'BEGIN {FS=":"} {if ($1 == "hopcount") {print $2;}}' > result/final/geo/hopcount.merced.csv
+cat result/final/geo.saopaulo |  awk 'BEGIN {FS=":"} {if ($1 == "hopcount") {print $2;}}' > result/final/geo/hopcount.saopaulo.csv
+cat result/final/geo.tucapel |  awk 'BEGIN {FS=":"} {if ($1 == "hopcount") {print $2;}}' > result/final/geo/hopcount.tucapel.csv
 
 ### country
 #Cantidad de prefijos por pais (Filtrando por presición < 1000km (¿cual es el maximo?))
@@ -66,11 +66,10 @@ cat result/final/geo.tucapel |  awk 'BEGIN {FS=":"} {if ($1 == "assignedweighted
 for a in "arica" "merced" "saopaulo" "tucapel"; do
     python result/final/plot.py ./result/final/geo/asncount.$a.csv ./result/final/graph/geo/asncount.$a.png 10 "$a: Numero de Redes /24 por Sistema Autonomo" "Sistema Autonomo" "Numero de Redes"
 done
-# jumpcount
-# Distance (TODO: Better graph)
-#for a in "arica" "merced" "saopaulo" "tucapel"; do
-#    python result/final/plot.py ./result/final/geo/jumpcount.$a.csv ./result/final/graph/geo/jumpcount.$a.png 10 "/24 Network Count Vs ASN" "ASN" "/24 Network Count"
-#done
+# hopcount
+for a in "arica" "merced" "saopaulo" "tucapel"; do
+    python result/final/plot.py ./result/final/geo/hopcount.$a.csv ./result/final/graph/geo/hopcount.$a.png 10 "$a: Numero de Sistemas Autonomos por Salto" "Saltos" "Numero de Sistemas Autonomos" 0
+done
 # country
 for a in "arica" "merced" "saopaulo" "tucapel"; do
     python result/final/plot.py ./result/final/geo/country.$a.csv ./result/final/graph/geo/country.$a.png 10 "$a: Numero de Redes por País" "Codigo País" "Numero de Redes"
@@ -123,13 +122,13 @@ cat result/final/latency.tucapel | awk 'BEGIN {FS=":"} {if ($1 == "weightedlaten
 
 # Generate graphs (TODO: Change axis when using weights)
 for a in "arica" "merced" "saopaulo" "tucapel"; do
-    python result/final/plot.py ./result/final/latency/networklatency.$a.csv ./result/final/graph/latency/networklatency.$a.png 50 "Tiempo de Retorno por Red /24" "Round Trip Time" "/24 Network Count" 0
+    python result/final/plot.py ./result/final/latency/networklatency.$a.csv ./result/final/graph/latency/networklatency.$a.png 50 "$a: Tiempo de Retorno por Red /24" "Round Trip Time" "/24 Network Count" 0
 done
 for a in "arica" "merced" "saopaulo" "tucapel"; do
-    python result/final/plot.py ./result/final/latency/aslatency.$a.csv ./result/final/graph/latency/aslatency.$a.png 50 "Tiempo de Retorno por Cantidad de Sistemas Autonomos" "Tiempo de Retorno" "Cantidad de Sistemas Autonomos" 0
+    python result/final/plot.py ./result/final/latency/aslatency.$a.csv ./result/final/graph/latency/aslatency.$a.png 50 "$a:Tiempo de Retorno por Cantidad de Sistemas Autonomos" "Tiempo de Retorno" "Cantidad de Sistemas Autonomos" 0
 done
 for a in "arica" "merced" "saopaulo" "tucapel"; do
-    python result/final/plot.py ./result/final/latency/weightedlatency.$a.csv ./result/final/graph/latency/weightedlatency.$a.png 50 "Tiempo de Retorno segun Media Ponderada de Clientes" "Tiempo de Retorno" "Media Ponderada de Clientes" 0
+    python result/final/plot.py ./result/final/latency/weightedlatency.$a.csv ./result/final/graph/latency/weightedlatency.$a.png 50 "$a: Tiempo de Retorno segun Media Ponderada de Clientes" "Tiempo de Retorno" "Media Ponderada de Clientes" 0
 done
 
 
@@ -137,7 +136,8 @@ done
 ########### Verification ##########
 ###################################
 
-RUSTFLAGS='-C target-cpu=native' RUST_LOG=anytrace=debug RUST_BACKTRACE=1 CARGO_TARGET_DIR=~/tmp cargo run --release --bin analyze estimator run data/bgp.csv
+RUSTFLAGS='-C target-cpu=native' RUST_LOG=anytrace=debug RUST_BACKTRACE=1 CARGO_TARGET_DIR=~/tmp cargo run --release --bin analyze verify data/bgp.csv ./data/ripe/capture.json
+
 
 ###################################
 ############ Topologic ############
@@ -152,26 +152,38 @@ cat result/final/estimator.raw | awk 'BEGIN {FS=":"} {if ($1 == "rawminimalcompa
 cat result/final/estimator.raw | awk 'BEGIN {FS=":"} {if ($1 == "rawareamaximal") {print $2;}}' > result/final/estimator/raw.count.csv
 cat result/final/estimator.weighted | awk 'BEGIN {FS=":"} {if ($1 == "rawminimalcompare") {print $2;}}' > result/final/estimator/weighted.min.csv
 
-python result/final/plotmultibar.py ./result/final/estimator/raw.min.csv ./result/final/graph/estimator/raw.min.png 10 "Title" "ASN" "Latencia" "AS Afectados" "RTT Inicial,RRT Final,AS Afectados"
-python result/final/plotmultibar.py ./result/final/estimator/raw.count.csv ./result/final/graph/estimator/raw.count.png 10 "Title" "ASN" "Latencia" "AS Afectados" "RTT Inicial,RRT Final,AS Afectados"
-python result/final/plotmultibar.py ./result/final/estimator/weighted.min.csv ./result/final/graph/estimator/weighted.min.png 10 "Title" "ASN" "Latencia" "AS Afectados" "RTT Inicial,RRT Final,AS Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/raw.min.csv ./result/final/graph/estimator/raw.min.png 10 "Minimización de Latencia" "Sistema Autonomo" "Latencia" "Sistemas Autonomos Afectados" "Latencia Inicial Cliente,Latencia Final Cliente,Sistemas Autonomos Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/raw.count.csv ./result/final/graph/estimator/raw.count.png 10 "Minimización de Latencia segun Sistemas Afectados" "Sistema Autonomo" "Latencia" "Sistemas Autonomos Afectados" "Latencia Inicial Cliente,Latencia Final Cliente,Sistemas Autonomos Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/weighted.min.csv ./result/final/graph/estimator/weighted.min.png 10 "Minimización de Latencia Ponderada" "Sistema Autonomo" "Latencia" "Sistemas Autonomos Afectados" "Latencia Inicial Cliente,Latencia Final Cliente,Sistemas Autonomos Afectados"
+
+# Latency limited weighted
+cat result/final/estimator.weighted | awk 'BEGIN {FS=":"} {if ($1 == "rawminimallimcompare1") {print $2;}}' > result/final/estimator/raw.wgt.lim1.csv
+cat result/final/estimator.weighted | awk 'BEGIN {FS=":"} {if ($1 == "rawminimallimcompare2") {print $2;}}' > result/final/estimator/raw.wgt.lim2.csv
+cat result/final/estimator.weighted | awk 'BEGIN {FS=":"} {if ($1 == "rawminimallimcompare3") {print $2;}}' > result/final/estimator/raw.wgt.lim3.csv
+cat result/final/estimator.weighted | awk 'BEGIN {FS=":"} {if ($1 == "rawminimallimcompare4") {print $2;}}' > result/final/estimator/raw.wgt.lim4.csv
+
+python result/final/plotmultibar.py ./result/final/estimator/raw.wgt.lim1.csv ./result/final/graph/estimator/raw.wgt.lim1.png 10 "Minimización de Latencia Limitada a 1 Salto" "Sistema Autonomo" "Latencia" "Sistemas Autonomos Afectados" "Saltos Iniciales,Saltos Finales,Sistemas Autonomos Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/raw.wgt.lim2.csv ./result/final/graph/estimator/raw.wgt.lim2.png 10 "Minimización de Latencia Limitada a 2 Salto" "Sistema Autonomo" "Latencia" "Sistemas Autonomos Afectados" "Saltos Iniciales,Saltos Finales,Sistemas Autonomos Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/raw.wgt.lim3.csv ./result/final/graph/estimator/raw.wgt.lim3.png 10 "Minimización de Latencia Limitada a 3 Salto" "Sistema Autonomo" "Latencia" "Sistemas Autonomos Afectados" "Saltos Iniciales,Saltos Finales,Sistemas Autonomos Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/raw.wgt.lim4.csv ./result/final/graph/estimator/raw.wgt.lim4.png 10 "Minimización de Latencia Limitada a 4 Salto" "Sistema Autonomo" "Latencia" "Sistemas Autonomos Afectados" "Saltos Iniciales,Saltos Finales,Sistemas Autonomos Afectados"
+
 
 # Hop
 cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "hoprawcompare") {print $2;}}' > result/final/estimator/hop.raw.csv
 cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "hopweightcompare") {print $2;}}' > result/final/estimator/hop.wgt.csv
-python result/final/plotmultibar.py ./result/final/estimator/hop.raw.csv ./result/final/graph/estimator/hop.raw.png 10 "Title" "ASN" "Latencia" "AS Afectados" "RTT Inicial,RRT Final,AS Afectados"
-python result/final/plotmultibar.py ./result/final/estimator/hop.wgt.csv ./result/final/graph/estimator/hop.wgt.png 10 "Title" "ASN" "Latencia" "AS Afectados" "RTT Inicial,RRT Final,AS Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/hop.raw.csv ./result/final/graph/estimator/hop.raw.png 10 "Minimización de Saltos" "Sistema Autonomo" "Latencia" "Sistemas Autonomos Afectados" "Latencia Inicial Cliente,Latencia Final Cliente,Sistemas Autonomos Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/hop.wgt.csv ./result/final/graph/estimator/hop.wgt.png 10 "Minimización de Saltos Ponderado" "Sistema Autonomo" "Latencia" "Sistemas Autonomos Afectados" "Latencia Inicial Cliente,Latencia Final Cliente,Sistemas Autonomos Afectados"
 
 # Limited raw
-cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "limitedrawcompare1") {print $2;}}' > result/final/estimator/hop.cmp1.csv
-cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "limitedrawcompare2") {print $2;}}' > result/final/estimator/hop.cmp2.csv
-cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "limitedrawcompare3") {print $2;}}' > result/final/estimator/hop.cmp3.csv
-cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "limitedrawcompare4") {print $2;}}' > result/final/estimator/hop.cmp4.csv
+cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "limitedrawcompare1") {print $2;}}' > result/final/estimator/raw.cmp1.csv
+cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "limitedrawcompare2") {print $2;}}' > result/final/estimator/raw.cmp2.csv
+cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "limitedrawcompare3") {print $2;}}' > result/final/estimator/raw.cmp3.csv
+cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "limitedrawcompare4") {print $2;}}' > result/final/estimator/raw.cmp4.csv
 
-python result/final/plotmultibar.py ./result/final/estimator/hop.cmp1.csv ./result/final/graph/estimator/hop.cmp1.png 10 "Title" "ASN" "Latencia" "AS Afectados" "Saltos Iniciales,Saltos Finales,AS Afectados"
-python result/final/plotmultibar.py ./result/final/estimator/hop.cmp2.csv ./result/final/graph/estimator/hop.cmp2.png 10 "Title" "ASN" "Latencia" "AS Afectados" "Saltos Iniciales,Saltos Finales,AS Afectados"
-python result/final/plotmultibar.py ./result/final/estimator/hop.cmp3.csv ./result/final/graph/estimator/hop.cmp3.png 10 "Title" "ASN" "Latencia" "AS Afectados" "Saltos Iniciales,Saltos Finales,AS Afectados"
-python result/final/plotmultibar.py ./result/final/estimator/hop.cmp4.csv ./result/final/graph/estimator/hop.cmp4.png 10 "Title" "ASN" "Latencia" "AS Afectados" "Saltos Iniciales,Saltos Finales,AS Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/raw.cmp1.csv ./result/final/graph/estimator/raw.cmp1.png 10 "Minimización Global Limitada a 1 Salto" "Sistema Autonomo" "Latencia" "Sistemas Autonomos Afectados" "Saltos Iniciales,Saltos Finales,Sistemas Autonomos Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/raw.cmp2.csv ./result/final/graph/estimator/raw.cmp2.png 10 "Minimización Global Limitada a 2 Salto" "Sistema Autonomo" "Latencia" "Sistemas Autonomos Afectados" "Saltos Iniciales,Saltos Finales,Sistemas Autonomos Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/raw.cmp3.csv ./result/final/graph/estimator/raw.cmp3.png 10 "Minimización Global Limitada a 3 Salto" "Sistema Autonomo" "Latencia" "Sistemas Autonomos Afectados" "Saltos Iniciales,Saltos Finales,Sistemas Autonomos Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/raw.cmp4.csv ./result/final/graph/estimator/raw.cmp4.png 10 "Minimización Global Limitada a 4 Salto" "Sistema Autonomo" "Latencia" "Sistemas Autonomos Afectados" "Saltos Iniciales,Saltos Finales,Sistemas Autonomos Afectados"
 
 # Limited weighted
 cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "hopweightcompare1") {print $2;}}' > result/final/estimator/hop.wgtcmp1.csv
@@ -179,7 +191,7 @@ cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "hopweightcompar
 cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "hopweightcompare3") {print $2;}}' > result/final/estimator/hop.wgtcmp3.csv
 cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "hopweightcompare4") {print $2;}}' > result/final/estimator/hop.wgtcmp4.csv
 
-python result/final/plotmultibar.py ./result/final/estimator/hop.wgtcmp1.csv ./result/final/graph/estimator/hop.wgtcmp1.png 10 "Title" "ASN" "Latencia" "AS Afectados" "Saltos Iniciales,Saltos Finales,AS Afectados"
-python result/final/plotmultibar.py ./result/final/estimator/hop.wgtcmp2.csv ./result/final/graph/estimator/hop.wgtcmp2.png 10 "Title" "ASN" "Latencia" "AS Afectados" "Saltos Iniciales,Saltos Finales,AS Afectados"
-python result/final/plotmultibar.py ./result/final/estimator/hop.wgtcmp3.csv ./result/final/graph/estimator/hop.wgtcmp3.png 10 "Title" "ASN" "Latencia" "AS Afectados" "Saltos Iniciales,Saltos Finales,AS Afectados"
-python result/final/plotmultibar.py ./result/final/estimator/hop.wgtcmp4.csv ./result/final/graph/estimator/hop.wgtcmp4.png 10 "Title" "ASN" "Latencia" "AS Afectados" "Saltos Iniciales,Saltos Finales,AS Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/hop.wgtcmp1.csv ./result/final/graph/estimator/hop.wgtcmp1.png 10 "Minimización de Saltos Limitada a 1 Salto" "Sistema Autonomo" "Latencia" "Sistemas Autonomos Afectados" "Saltos Iniciales,Saltos Finales,Sistemas Autonomos Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/hop.wgtcmp2.csv ./result/final/graph/estimator/hop.wgtcmp2.png 10 "Minimización de Saltos Limitada a 2 Salto" "Sistema Autonomo" "Latencia" "Sistemas Autonomos Afectados" "Saltos Iniciales,Saltos Finales,Sistemas Autonomos Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/hop.wgtcmp3.csv ./result/final/graph/estimator/hop.wgtcmp3.png 10 "Minimización de Saltos Limitada a 3 Salto" "Sistema Autonomo" "Latencia" "Sistemas Autonomos Afectados" "Saltos Iniciales,Saltos Finales,Sistemas Autonomos Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/hop.wgtcmp4.csv ./result/final/graph/estimator/hop.wgtcmp4.png 10 "Minimización de Saltos Limitada a 4 Salto" "Sistema Autonomo" "Latencia" "Sistemas Autonomos Afectados" "Saltos Iniciales,Saltos Finales,Sistemas Autonomos Afectados"
