@@ -332,6 +332,65 @@ where
     return result;
 }
 
+
+pub fn load_ratetable_asn_rate(filter: &HashSet<u32>, asn: &IpLookupTable<Ipv4Addr, Vec<u32>>,) -> HashMap<u32, f64> {
+    let captures = vec![
+        /*
+            "data/merced.gz",
+            "data/captures/amsterdam.gz",
+            "data/captures/elsegundo.gz",
+            "data/captures/monterreya.gz",
+            "data/captures/redwood.gz",
+            "data/captures/buenosaires.gz",
+            "data/captures/lima.gz",
+            "data/captures/praga.gz",
+            "data/captures/tokio.gz",*/
+        "data/capture/saopaulo.gz",
+        "data/capture/merced.gz",
+        "data/capture/tucapel.gz",
+        "data/captures/redwood.gz",
+    ];
+    let mut result = HashMap::new();
+    for path in captures {
+        let f = File::open(path).unwrap();
+        let zip = GzDecoder::new(f);
+
+        let mut mintime = std::f64::MAX;
+        let mut maxtime = std::f64::MIN;
+        let mut querys = HashMap::new();
+        for line in BufReader::new(zip).lines() {
+            let data = line.unwrap();
+            let r = data.split("\t").collect::<Vec<&str>>();
+            let ip: Ipv4Addr = ip_normalize(r[1].parse().unwrap());
+            let time: f64 = r[0].parse().unwrap();
+            *querys.entry(ip).or_insert(0) += 1;
+
+            mintime = time.min(mintime);
+            maxtime = time.max(maxtime);
+        }
+
+        // Normalize ans insert
+        for (ip, count) in querys.iter() {
+            if *count > 0 {
+                *result.entry(*ip).or_insert(0f64) += *count as f64 / (maxtime - mintime);
+            }
+        }
+    }
+    // Transform ip to ASN
+    let mut asquery = HashMap::new();
+    for (ip, w) in result.iter() {
+        if let Some((_, _, asn)) = asn.longest_match(*ip) {
+            for asn in asn {
+                if filter.contains(&asn) {
+                    *asquery.entry(*asn).or_insert(0f64) += w;
+                }
+            }
+        }
+    }
+
+    return asquery;
+}
+
 /// Load the weights from dump
 pub fn load_weights(filter: &HashMap<Ipv4Addr, Vec<u64>>) -> HashMap<Ipv4Addr, f64> {
     return load_weights_lambda(|x| filter.contains_key(x));

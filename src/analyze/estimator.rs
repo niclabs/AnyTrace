@@ -15,7 +15,7 @@ use std::net::Ipv4Addr;
 
 use self::bzip2::read::BzDecoder;
 use self::treebitmap::IpLookupTable;
-use analyze::helper::{load_asn, load_data, load_weights_asn, get_locations_asn};
+use analyze::helper::{load_asn, load_data, load_weights_asn, load_ratetable_asn_rate, get_locations_asn};
 
 pub fn estimator() {
     let arguments = env::args().collect::<Vec<String>>();
@@ -411,6 +411,10 @@ fn run_estimator_weighted(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
         &graph.iter().map(|(x, _)| *x).collect::<HashSet<u32>>(),
         asn,
     );
+    let rates = load_ratetable_asn_rate(
+        &graph.iter().map(|(x, _)| *x).collect::<HashSet<u32>>(),
+        asn,
+    );
     let keys = graph.iter().map(|(x, _)| *x).collect::<Vec<u32>>();
 
     {
@@ -436,11 +440,11 @@ fn run_estimator_weighted(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
         for i in 0..50.min(results.len()) {
             println!("weightedminimal:{},{}", results[i].0, results[i].1);
             // Local effect
-            let (before, after, count) =
-                calculate_effect_weighted(&base, &dijkstra(results[i].0, &graph, asn), &weights);
+            let (before, after, count, rate) =
+                calculate_effect_weighted2(&base, &dijkstra(results[i].0, &graph, asn), &weights, &rates);
             println!(
-                "rawminimalcompare:{},{},{},{}",
-                results[i].0, before, after, count
+                "rawminimalcompare:{},{},{},{},{}",
+                results[i].0, before, after, count, rate
             );
         }
 
@@ -521,6 +525,38 @@ fn calculate_effect_weighted(
         (before / sumweights) as f32,
         (after / sumweights) as f32,
         count,
+    );
+}
+
+fn calculate_effect_weighted2(
+    base: &HashMap<u32, f32>,
+    result: &HashMap<u32, f32>,
+    weights: &HashMap<u32, f64>,
+    rate: &HashMap<u32, f64>,
+) -> (f32, f32, u32, f64) {
+    let mut before = 0f64;
+    let mut after = 0f64;
+    let mut count = 0;
+    let mut sumweights = 0f64;
+    let mut qps = 0f64;
+    for (asn, ms) in result.iter() {
+        if let Some(r) = base.get(asn) {
+            if !almost_equal(*ms, *r) {
+                let w = *weights.get(asn).unwrap_or(&0f64);
+                count += 1;
+                after += *ms as f64 * w;
+                before += *r as f64 * w;
+                sumweights += w;
+                qps += *rate.get(asn).unwrap_or(&0f64);
+            }
+        }
+    }
+
+    return (
+        (before / sumweights) as f32,
+        (after / sumweights) as f32,
+        count,
+        qps * 60f64,
     );
 }
 
