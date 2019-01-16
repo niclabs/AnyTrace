@@ -7,7 +7,7 @@ use self::geo::Point;
 use self::treebitmap::IpLookupTable;
 use analyze::helper::{
     generate_citytable, generate_geotable, ip_normalize, load_area, load_asn, load_data,
-    load_weights, CityLoc, GeoLoc, get_locations, get_locations_asn,
+    load_weights, CityLoc, GeoLoc, get_locations, get_locations_asn, load_ratetable_asn_rate
 };
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
@@ -394,9 +394,23 @@ fn geolocalize_asnaware(
     for (loc, count) in result.iter() {
         println!("countryas:{},{}", loc.country, count);
     }
+
+    let rates = load_ratetable_asn_rate(&geoasn.values().fold(HashSet::new(), |mut x, y| {x.extend(y); x}), asn);
+    let mut result2 = geoasn
+        .iter()
+        .map(|(x, y)| (x, y.iter().map(|asn| rates.get(asn).unwrap_or(&0f64)).sum()))
+        .collect::<Vec<(&GeoLoc, f64)>>();
+    result2.sort_by_key(|(_, y)| (*y * 100_000f64) as u64);
+    // Number of AS by country
+    for (loc, count) in result2.iter() {
+        println!("countryweight:{},{}", loc.country, count);
+    }
+    
+
 }
 
 fn geolocalize_weighted(area: &HashMap<Ipv4Addr, Vec<u64>>) {
+    /*
     let weight = load_weights(area);
     let geo = generate_geotable();
 
@@ -431,7 +445,7 @@ fn geolocalize_weighted(area: &HashMap<Ipv4Addr, Vec<u64>>) {
             loc.country,
             count / result.values().sum::<f64>()
         );
-    }
+    }*/
 }
 
 pub fn graph_info() {
@@ -457,7 +471,7 @@ pub fn graph_info() {
     //let _distance = analyze_paths(&graph, &asn, (Ipv4Addr::new(200, 1, 123, 0), 0));
     //let _distance = analyze_paths(&graph, &asn, (Ipv4Addr::new(190, 153, 177, 0), 0));
     let locations = get_locations();
-    info!("{:?}", get_locations_asn(&asn));
+    //info!("{:?}", get_locations_asn(&asn));
 
     let _distance = analyze_paths(&graph, &asn, locations.get(&origin).unwrap());
 

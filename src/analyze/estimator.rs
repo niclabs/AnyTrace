@@ -144,6 +144,11 @@ fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
         );
     }
 
+    let rates = load_ratetable_asn_rate(
+        &result.iter().map(|(x, _)| *x).collect::<HashSet<u32>>(),
+        asn,
+    );
+
     // Try to optimize this network
     // This will handle when we have nodes with unknown area of service
     // and only offer new places on known networks
@@ -167,8 +172,8 @@ fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
             // Local effect
             let (before, after, count) = calculate_effect(&base, &dijkstra_hops(dist[i].0, &result, asn).iter().map(|(x,y)| (*x,*y as f32)).collect::<HashMap<u32, f32>>());
             println!(
-                "hoprawcompare:{},{},{},{}",
-                dist[i].0, before, after, count
+                "hoprawcompare:{},{},{},{},{}",
+                dist[i].0, before, after, count, calculate_affected_rate(&base, &dijkstra_hops(dist[i].0, &result, asn).iter().map(|(x,y)| (*x,*y as f32)).collect::<HashMap<u32, f32>>(), &rates)
             );
         }
     }
@@ -212,8 +217,8 @@ fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
             // Local effect
             let (before, after, count) = calculate_effect_weighted(&base, &dijkstra_hops(dist[i].0, &result, asn).iter().map(|(x,y)| (*x,*y as f32)).collect::<HashMap<u32, f32>>(), &weights);
             println!(
-                "hopweightcompare:{},{},{},{}",
-                dist[i].0, before, after, count
+                "hopweightcompare:{},{},{},{},{}",
+                dist[i].0, before, after, count, calculate_affected_rate(&base, &dijkstra_hops(dist[i].0, &result, asn).iter().map(|(x,y)| (*x,*y as f32)).collect::<HashMap<u32, f32>>(), &rates)
             );
         }
     }
@@ -248,8 +253,8 @@ fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
             // Local effect
             let (before, after, count) = calculate_effect(&tmpbase, &dijkstra_hops_limited(dist[i].0, max_hops, &result, &base, asn).iter().map(|(x,y)| (*x,*y as f32)).collect::<HashMap<u32, f32>>());
             println!(
-                "limitedrawcompare{}:{},{},{},{}",
-                max_hops, dist[i].0, before, after, count
+                "limitedrawcompare{}:{},{},{},{},{}",
+                max_hops, dist[i].0, before, after, count, calculate_affected_rate(&tmpbase, &dijkstra_hops(dist[i].0, &result, asn).iter().map(|(x,y)| (*x,*y as f32)).collect::<HashMap<u32, f32>>(), &rates)
             );
         }
     }
@@ -299,8 +304,8 @@ fn run_estimator_hop(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
                 &weights
             );
             println!(
-                "hopweightcompare{}:{},{},{},{}",
-                max_hops, dist[i].0, before, after, count
+                "hopweightcompare{}:{},{},{},{},{}",
+                max_hops, dist[i].0, before, after, count, calculate_affected_rate(&tmpbase, &dijkstra_hops(dist[i].0, &result, asn).iter().map(|(x,y)| (*x,*y as f32)).collect::<HashMap<u32, f32>>(), &rates)
             );
         }
     }
@@ -440,11 +445,11 @@ fn run_estimator_weighted(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
         for i in 0..50.min(results.len()) {
             println!("weightedminimal:{},{}", results[i].0, results[i].1);
             // Local effect
-            let (before, after, count, rate) =
-                calculate_effect_weighted2(&base, &dijkstra(results[i].0, &graph, asn), &weights, &rates);
+            let (before, after, count) =
+                calculate_effect_weighted(&base, &dijkstra(results[i].0, &graph, asn), &weights);
             println!(
                 "rawminimalcompare:{},{},{},{},{}",
-                results[i].0, before, after, count, rate
+                results[i].0, before, after, count, calculate_affected_rate(&base, &dijkstra(results[i].0, &graph, asn), &rates)
             );
         }
 
@@ -493,8 +498,8 @@ fn run_estimator_weighted(asn: &IpLookupTable<Ipv4Addr, Vec<u32>>) {
             let (before, after, count) =
                 calculate_effect_weighted(&base, &dijkstra_limited(results[i].0, &graph, asn, limit, &base), &weights);
             println!(
-                "rawminimallimcompare{}:{},{},{},{}",
-                limit, results[i].0, before, after, count
+                "rawminimallimcompare{}:{},{},{},{},{}",
+                limit, results[i].0, before, after, count, calculate_affected_rate(&base, &dijkstra_limited(results[i].0, &graph, asn, limit, &base), &rates)
             );
         }
     }
@@ -524,40 +529,23 @@ fn calculate_effect_weighted(
     return (
         (before / sumweights) as f32,
         (after / sumweights) as f32,
-        count,
+        sumweights as u32,
     );
 }
 
-fn calculate_effect_weighted2(
+fn calculate_affected_rate(
     base: &HashMap<u32, f32>,
     result: &HashMap<u32, f32>,
-    weights: &HashMap<u32, f64>,
-    rate: &HashMap<u32, f64>,
-) -> (f32, f32, u32, f64) {
-    let mut before = 0f64;
-    let mut after = 0f64;
-    let mut count = 0;
-    let mut sumweights = 0f64;
+    rate: &HashMap<u32, f64>,) -> f64 {
     let mut qps = 0f64;
     for (asn, ms) in result.iter() {
         if let Some(r) = base.get(asn) {
             if !almost_equal(*ms, *r) {
-                let w = *weights.get(asn).unwrap_or(&0f64);
-                count += 1;
-                after += *ms as f64 * w;
-                before += *r as f64 * w;
-                sumweights += w;
                 qps += *rate.get(asn).unwrap_or(&0f64);
             }
         }
     }
-
-    return (
-        (before / sumweights) as f32,
-        (after / sumweights) as f32,
-        count,
-        qps * 60f64,
-    );
+    return qps * 60f64;
 }
 
 /// Calculate the difference between the hashmaps, returning (valuebefore, valueafter, count)
@@ -580,7 +568,7 @@ fn calculate_effect(base: &HashMap<u32, f32>, result: &HashMap<u32, f32>) -> (f3
         before / count as f32,
         count,
         after,
-        before
+        count
     );
     return (before / count as f32, after / count as f32, count);
 }
@@ -594,6 +582,10 @@ fn run_estimator(asnpath: &String) {
     let mut keys = graph.iter().map(|(x, _)| *x).collect::<Vec<u32>>();
     keys.sort();
     info!("ASN count: {}", keys.len());
+    let rates = load_ratetable_asn_rate(
+        &graph.iter().map(|(x, _)| *x).collect::<HashSet<u32>>(),
+        asn,
+    );
 
     {
         let mut results = Vec::new();
@@ -621,8 +613,8 @@ fn run_estimator(asnpath: &String) {
             // Local effect
             let (before, after, count) = calculate_effect(&base, &dijkstra(results[i].0, &graph, asn));
             println!(
-                "rawminimalcompare:{},{},{},{}",
-                results[i].0, before, after, count
+                "rawminimalcompare:{},{},{},{},{}",
+                results[i].0, before, after, count, calculate_affected_rate(&base, &dijkstra(results[i].0, &graph, asn), &rates)
             );
         }
     }
@@ -651,8 +643,8 @@ fn run_estimator(asnpath: &String) {
         for i in 0..50.min(results.len()) {
             let (before, after, count) = calculate_effect(&base, &dijkstra(*results[i].0, &graph, asn));
             println!(
-                "rawareamaximal:{},{},{},{}",
-                results[i].0, before, after, count
+                "rawareamaximal:{},{},{},{},{}",
+                results[i].0, before, after, count, calculate_affected_rate(&base, &dijkstra(*results[i].0, &graph, asn), &rates)
             );
         }
     }

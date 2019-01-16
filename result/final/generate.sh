@@ -171,8 +171,8 @@ python result/final/plotmultibar.py ./result/final/estimator/raw.wgt.lim4.csv ./
 # Hop
 cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "hoprawcompare") {print $2;}}' > result/final/estimator/hop.raw.csv
 cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "hopweightcompare") {print $2;}}' > result/final/estimator/hop.wgt.csv
-python result/final/plotmultibar.py ./result/final/estimator/hop.raw.csv ./result/final/graph/estimator/hop.raw.png 10 "Minimización de Saltos" "Sistema Autonomo" "Latencia" "Sistemas Autonomos Afectados" "Latencia Inicial Cliente,Latencia Final Cliente,Sistemas Autonomos Afectados"
-python result/final/plotmultibar.py ./result/final/estimator/hop.wgt.csv ./result/final/graph/estimator/hop.wgt.png 10 "Minimización de Saltos Ponderado" "Sistema Autonomo" "Latencia" "Sistemas Autonomos Afectados" "Latencia Inicial Cliente,Latencia Final Cliente,Sistemas Autonomos Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/hop.raw.csv ./result/final/graph/estimator/hop.raw.png 10 "Minimización de Saltos" "Sistema Autonomo" "Saltos" "Sistemas Autonomos Afectados" "Latencia Inicial Cliente,Latencia Final Cliente,Sistemas Autonomos Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/hop.wgt.csv ./result/final/graph/estimator/hop.wgt.png 10 "Minimización de Saltos Ponderado" "Sistema Autonomo" "Saltos" "Sistemas Autonomos Afectados" "Saltos Inicial Cliente,Saltos Final Cliente,Sistemas Autonomos Afectados"
 
 # Limited raw
 cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "limitedrawcompare1") {print $2;}}' > result/final/estimator/raw.cmp1.csv
@@ -180,10 +180,10 @@ cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "limitedrawcompa
 cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "limitedrawcompare3") {print $2;}}' > result/final/estimator/raw.cmp3.csv
 cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "limitedrawcompare4") {print $2;}}' > result/final/estimator/raw.cmp4.csv
 
-python result/final/plotmultibar.py ./result/final/estimator/raw.cmp1.csv ./result/final/graph/estimator/raw.cmp1.png 10 "Minimización Global Limitada a 1 Salto" "Sistema Autonomo" "Latencia" "Sistemas Autonomos Afectados" "Saltos Iniciales,Saltos Finales,Sistemas Autonomos Afectados"
-python result/final/plotmultibar.py ./result/final/estimator/raw.cmp2.csv ./result/final/graph/estimator/raw.cmp2.png 10 "Minimización Global Limitada a 2 Salto" "Sistema Autonomo" "Latencia" "Sistemas Autonomos Afectados" "Saltos Iniciales,Saltos Finales,Sistemas Autonomos Afectados"
-python result/final/plotmultibar.py ./result/final/estimator/raw.cmp3.csv ./result/final/graph/estimator/raw.cmp3.png 10 "Minimización Global Limitada a 3 Salto" "Sistema Autonomo" "Latencia" "Sistemas Autonomos Afectados" "Saltos Iniciales,Saltos Finales,Sistemas Autonomos Afectados"
-python result/final/plotmultibar.py ./result/final/estimator/raw.cmp4.csv ./result/final/graph/estimator/raw.cmp4.png 10 "Minimización Global Limitada a 4 Salto" "Sistema Autonomo" "Latencia" "Sistemas Autonomos Afectados" "Saltos Iniciales,Saltos Finales,Sistemas Autonomos Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/raw.cmp1.csv ./result/final/graph/estimator/raw.cmp1.png 10 "Minimización Saltos Limitada a 1 Salto" "Sistema Autonomo" "Saltos" "Sistemas Autonomos Afectados" "Saltos Iniciales,Saltos Finales,Sistemas Autonomos Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/raw.cmp2.csv ./result/final/graph/estimator/raw.cmp2.png 10 "Minimización Saltos Limitada a 2 Salto" "Sistema Autonomo" "Saltos" "Sistemas Autonomos Afectados" "Saltos Iniciales,Saltos Finales,Sistemas Autonomos Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/raw.cmp3.csv ./result/final/graph/estimator/raw.cmp3.png 10 "Minimización Saltos Limitada a 3 Salto" "Sistema Autonomo" "Saltos" "Sistemas Autonomos Afectados" "Saltos Iniciales,Saltos Finales,Sistemas Autonomos Afectados"
+python result/final/plotmultibar.py ./result/final/estimator/raw.cmp4.csv ./result/final/graph/estimator/raw.cmp4.png 10 "Minimización Saltos Limitada a 4 Salto" "Sistema Autonomo" "Saltos" "Sistemas Autonomos Afectados" "Saltos Iniciales,Saltos Finales,Sistemas Autonomos Afectados"
 
 # Limited weighted
 cat result/final/estimator.hop | awk 'BEGIN {FS=":"} {if ($1 == "hopweightcompare1") {print $2;}}' > result/final/estimator/hop.wgtcmp1.csv

@@ -3,6 +3,12 @@ from matplotlib.finance import candlestick_ohlc, candlestick2_ohlc
 
 import csv
 import sys
+import math
+
+# 3 == ASN AFFECTED, 4 == QPS
+USE_DATA_FROM = 3
+USE_LOG = False
+
 
 def autolabel(rects):
     """
@@ -30,7 +36,8 @@ with open(filename,'r') as csvfile:
     plots = csv.reader(csvfile, delimiter=',', escapechar="\\")
     for row in plots:
         x.append(str(row[0]))
-        yy.append([float(x) for x in row[1:]])
+        #yy.append([float(x) for x in row[1:4]])
+        yy.append([float(row[i]) for i in [1,2,USE_DATA_FROM]])
 
 if limit > 0:
     x = x[:limit]
@@ -49,21 +56,29 @@ for i in range(len(x)):
 candlestick_ohlc(ax, data, width=0.1)
 plt.plot(range(len(x)), [yy[i][0] for i in range(len(x))], 'ro', markersize=3)
 for i in range(len(x)):
-    plt.text(i+0.1, yy[i][0]*1.01, str(int(yy[i][0])), fontsize=8)
+    plt.text(i-0.6, yy[i][0]*1.01, str("%.1f" % (yy[i][0])), fontsize=8)
 plt.plot(range(len(x)), [yy[i][1] for i in range(len(x))], 'go', markersize=3)
 for i in range(len(x)):
-    plt.text(i+0.1, yy[i][1]-1, str(int(yy[i][1])), fontsize=8)
+    #plt.text(i+0.1, yy[i][1]*0.9, str(int(yy[i][1])), fontsize=8)
+    plt.text(i+0.1, yy[i][1]*0.98, str("%.1f" % (yy[i][1])), fontsize=8)
 
 plt.xticks(range(len(x)), x)
 plt.ylabel(yname)
 plt.xlabel(xname)
+plt.legend(legend[0:2])
 
 # draw the affected
 plt.subplot(212, sharex=ax)
+if USE_LOG:
+    plt.gca().set_yscale("log", nonposy='clip')
 plt.bar(range(len(x)), [yy[i][2] for i in range(len(yy))])
 plt.ylabel(y2name)
 plt.xlabel(xname)
+plt.yticks()
+
 #ax.set_ylim([0, 10])
+#plt.legend(legend[2:])
+
 
 # Make the plot fit inside the image
 plt.tight_layout()
